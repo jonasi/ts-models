@@ -1,0 +1,21 @@
+{
+  "name": "@jonasi/ts-models",
+  "version": "0.0.1",
+  "main": "dist/index.js",
+  "bin": {
+    "ts-models-gen": "./dist/bin/index.js"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@jonasi/jslog": "^0.0.2",
+    "@types/jest": "^25.2.3",
+    "@types/node": "^14.0.5",
+    "@typescript-eslint/eslint-plugin": "^3.0.1",
+    "@typescript-eslint/parser": "^3.0.1",
+    "eslint": "^7.1.0",
+    "jest": "^26.0.1",
+    "ts-jest": "^26.0.0",
+    "ts-node": "^8.10.1",
+    "typescript": "^3.9.3"
+  }
+}

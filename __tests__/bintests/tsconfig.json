@@ -1,0 +1,13 @@
+{
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        "baseUrl": "../..", // this must be specified if "paths" is specified.
+        "paths": {
+          "@jonasi/ts-models": ["src/index.ts"] // this mapping is relative to "baseUrl"
+        },
+    },
+    "include": [
+        "./*",
+        "../../src/**/*"
+    ]
+}
