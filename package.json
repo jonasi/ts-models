@@ -1,9 +1,9 @@
 {
   "name": "@jonasi/ts-models",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "main": "dist/index.js",
   "bin": {
-    "ts-models-gen": "./dist/bin/index.js"
+    "ts-models-generate": "./dist/bin/index.js"
   },
   "license": "MIT",
   "devDependencies": {
