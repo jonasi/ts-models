@@ -1,7 +1,9 @@
 import { assert, checkShapeOf, checkString, checkNumber, JSONValue, Check, checkDate } from '../src/index';
 
-const valueTests: { type: string, it: string, input: JSONValue, check: Check<unknown>, output?: unknown, error?: boolean }[] = [
+const valueTests: { type: string, it: string, input: JSONValue | undefined, check: Check<unknown>, output?: unknown, error?: boolean }[] = [
     { type: 'string', it: 'should pass through', check: checkString, input: 'str', output: 'str' },
+    { type: 'string', it: 'should default to empty string (undefined)', check: checkString, input: void 0, output: '' },
+    { type: 'string', it: 'should default to empty string (null)', check: checkString, input: null, output: '' },
     { type: 'string', it: 'should throw on non-string', check: checkString, input: false, error: true },
     { type: 'number', it: 'should pass through', check: checkNumber, input: 4, output: 4 },
     { type: 'number', it: 'should throw on non-number', check: checkNumber, input: '4', error: true },

@@ -1,4 +1,5 @@
-export type JSONValue = null | string | number | boolean | JSONValue[] | { [prop: string]: JSONValue };
+// undefined isn't really a json type, but we often encounter it with missing keys
+export type JSONValue = undefined | null | string | number | boolean | JSONValue[] | { [prop: string]: JSONValue };
 
 export interface Check<T> {
     (js: JSONValue): [ T ] | undefined;
@@ -16,19 +17,33 @@ export function assert<T>(js: JSONValue, check: Check<T>): T {
     throw new Error("Value failed " + check.id);
 }
 
-function makeCheck<T>(id: string, fn: (js: JSONValue) => [ T ] | undefined): Check<T> {
-    const ch = (js: JSONValue): [ T ] | undefined => fn(js);
+function makeCheck<T>(id: string, fn: (js: JSONValue) => [ T ] | undefined, def?: T): Check<T> {
+    const ch = (js: JSONValue): [ T ] | undefined => {
+        const v = fn(js);
+        if (v) {
+            return v;
+        }
+
+        if (isEmpty(js) && def !== void 0) {
+            return [ def ];
+        }
+    };
+
     ch.id = id;
 
     return ch;
 }
 
-export const checkEmpty = makeCheck('empty', js => js === void 0 || js === null ? [ void 0 ] : void 0);
-export const checkString = makeCheck('string', js => typeof js === 'string' ? [ js ] : void 0);
+function isEmpty(v: unknown): boolean {
+    return v === void 0 || v === null;
+}
+
+export const checkEmpty = makeCheck('empty', js => isEmpty(js) ? [ void 0 ] : void 0);
+export const checkString = makeCheck('string', js => typeof js === 'string' ? [ js ] : void 0, '');
 export const checkBoolean = makeCheck('boolean', js => typeof js === 'boolean' ? [ js ] : void 0);
 export const checkNumber = makeCheck('number', js => typeof js === 'number' ? [ js ] : void 0);
 export const checkObject = makeCheck('object', js => typeof js === 'object' && js && !Array.isArray(js) ? [ js ] : void 0);
-export const checkArray = makeCheck('array', js => Array.isArray(js) ? [ js ] : void 0);
+export const checkArray = makeCheck('array', js => Array.isArray(js) ? [ js ] : void 0, []);
 export const checkDate = makeCheck('date', js => typeof js === 'string' || typeof js === 'number' ? [ new Date(js) ] : void 0);
 
 export function checkOr<T extends [ unknown ] | unknown[]>(checks: CheckArr<T>): Check<T[number]> {
