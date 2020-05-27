@@ -1,4 +1,4 @@
-// ts-models-generate
+// @jonasi/ts-models generate
 type T = {
     arr: string[];
 };

@@ -1,6 +1,6 @@
 export type JSONValue = null | string | number | boolean | JSONValue[] | { [prop: string]: JSONValue };
 
-interface Check<T> {
+export interface Check<T> {
     (js: JSONValue): [ T ] | undefined;
     id: string;
 }
@@ -29,6 +29,7 @@ export const checkBoolean = makeCheck('boolean', js => typeof js === 'boolean' ?
 export const checkNumber = makeCheck('number', js => typeof js === 'number' ? [ js ] : void 0);
 export const checkObject = makeCheck('object', js => typeof js === 'object' && js && !Array.isArray(js) ? [ js ] : void 0);
 export const checkArray = makeCheck('array', js => Array.isArray(js) ? [ js ] : void 0);
+export const checkDate = makeCheck('date', js => typeof js === 'string' || typeof js === 'number' ? [ new Date(js) ] : void 0);
 
 export function checkOr<T extends [ unknown ] | unknown[]>(checks: CheckArr<T>): Check<T[number]> {
     // eslint-disable-next-line

@@ -3,12 +3,45 @@ import { join, dirname } from 'path';
 import { readFileSync, existsSync } from 'fs';
 // import log from '@jonasi/jslog';
 
+const virtualFile = {
+    name:     '__generated__/@jonasi/ts-models/virtual_file.ts',
+    contents: `
+declare var date: Date;
+`,
+};
+
+type Globals = {
+    Date: ts.Type,
+};
+
 export function generateModels(file: string): string {
     const conf = loadConfig(file);
-    const prog = ts.createProgram([ file ], conf.options);
-    const nodes = createModels(prog);
+    const host = ts.createCompilerHost(conf.options);
+    const old = host.readFile;
+    host.readFile = f => {
+        if (f === virtualFile.name) {
+            return virtualFile.contents;
+        }
+
+        return old(f);
+    };
+
+    const prog = ts.createProgram([ file, virtualFile.name ], conf.options, host);
     const f = prog.getSourceFile(file) as ts.SourceFile;
+    const nodes = createModels(prog);
+
     return print(f, nodes);
+}
+
+function getGlobals(prog: ts.Program): Globals {
+    const ch = prog.getTypeChecker();
+    const vf = prog.getSourceFile(virtualFile.name) as ts.SourceFile;
+
+    return {
+        Date: ch.getTypeFromTypeNode(
+            (vf.statements[0] as ts.VariableStatement).declarationList.declarations[0].type as ts.TypeNode
+        ),
+    };
 }
 
 function parseModels(pr: ts.Program): ts.TypeAliasDeclaration[] {
@@ -87,9 +120,10 @@ function loadConfig(root: string): ts.ParsedCommandLine {
 
 function createModels(prog: ts.Program): ts.Node[] {
     const ch = prog.getTypeChecker();
+    const globals = getGlobals(prog);
     const types = parseModels(prog);
     const header = types.length ? makeHeader() : [];
-    const defs = types.map(t => makeDef(ch, t)).flat();
+    const defs = types.map(t => makeDef(ch, globals, t)).flat();
 
     return [
         ...header,
@@ -111,10 +145,10 @@ function makeHeader(): ts.Node[] {
     ];
 }
 
-function makeDef(ch: ts.TypeChecker, n: ts.TypeAliasDeclaration): ts.Node[] {
+function makeDef(ch: ts.TypeChecker, globals: Globals, n: ts.TypeAliasDeclaration): ts.Node[] {
     return [
         makeType(n),
-        makeCheckFn(n.name.text, ch, ch.getTypeAtLocation(n.type)),
+        makeCheckFn(n.name.text, ch, globals, ch.getTypeAtLocation(n.type)),
         makeFn(n),
         makeFnArr(n),
     ];
@@ -236,8 +270,8 @@ function isTypeReference(t: ts.Type): t is ts.TypeReference {
     return isObject(t) && !!(t.objectFlags & ts.ObjectFlags.Reference);
 }
 
-function makeCheckFn(name: string, ch: ts.TypeChecker, typ: ts.Type): ts.VariableDeclarationList {
-    const check = makeCheck(ch, typ);
+function makeCheckFn(name: string, ch: ts.TypeChecker, globals: Globals, typ: ts.Type): ts.VariableDeclarationList {
+    const check = makeCheck(ch, globals, typ);
     return ts.createVariableDeclarationList([
         ts.createVariableDeclaration(
             'check_' + name,
@@ -247,7 +281,7 @@ function makeCheckFn(name: string, ch: ts.TypeChecker, typ: ts.Type): ts.Variabl
     ], ts.NodeFlags.Const);
 }
 
-function makeCheck(ch: ts.TypeChecker, typ: ts.Type): ts.Expression {
+function makeCheck(ch: ts.TypeChecker, globals: Globals, typ: ts.Type): ts.Expression {
     if (isBoolean(typ)) {
         return ts.createIdentifier('runtime.checkBoolean');
     }
@@ -261,6 +295,10 @@ function makeCheck(ch: ts.TypeChecker, typ: ts.Type): ts.Expression {
         return ts.createIdentifier('runtime.checkEmpty');
     }
 
+    if (typ === globals.Date) {
+        return ts.createIdentifier('runtime.checkDate');
+    }
+
     const ok = isLiteral(ch, typ);
     if (ok) {
         const arg = ts.createIdentifier(ch.typeToString(typ));
@@ -271,7 +309,7 @@ function makeCheck(ch: ts.TypeChecker, typ: ts.Type): ts.Expression {
 
     const eltyp = isArray(ch, typ);
     if (eltyp) {
-        const arg = makeCheck(ch, eltyp);
+        const arg = makeCheck(ch, globals, eltyp);
         return ts.createCall(
             ts.createIdentifier('runtime.checkArrayOf'), [], [ arg ],
         );
@@ -287,7 +325,7 @@ function makeCheck(ch: ts.TypeChecker, typ: ts.Type): ts.Expression {
         const props = typ.getProperties();
         for (const k in props) {
             const elT = ch.getTypeAtLocation(props[k].valueDeclaration);
-            const check = makeCheck(ch, elT);
+            const check = makeCheck(ch, globals, elT);
 
             assignments.push(ts.createPropertyAssignment(props[k].name, check));
         }
@@ -299,7 +337,7 @@ function makeCheck(ch: ts.TypeChecker, typ: ts.Type): ts.Expression {
     }
 
     if (typ.isUnion()) {
-        const args = typ.types.map(t => makeCheck(ch, t));
+        const args = typ.types.map(t => makeCheck(ch, globals, t));
         const arg = ts.createArrayLiteral(args as ts.Expression[], true);
 
         return ts.createCall(
@@ -308,7 +346,7 @@ function makeCheck(ch: ts.TypeChecker, typ: ts.Type): ts.Expression {
     }
 
     if (typ.isIntersection()) {
-        const args = typ.types.map(t => makeCheck(ch, t));
+        const args = typ.types.map(t => makeCheck(ch, globals, t));
 
         const arg = ts.createArrayLiteral(args as ts.Expression[], true);
         return ts.createCall(
