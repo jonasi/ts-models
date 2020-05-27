@@ -31,5 +31,5 @@
         "comma-spacing": ["error", {"before": false, "after": true }],
         "eqeqeq": ["error", "always"]
     },
-    "ignorePatterns": ["**/bintests/*"]
+    "ignorePatterns": ["**/bintests/*", "**/dist/**/*"]
 }
