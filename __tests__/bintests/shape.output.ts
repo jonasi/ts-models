@@ -4,14 +4,14 @@ type T = {
         str: string;
     };
 };
-const check_T: runtime.Check<T> = runtime.checkShapeOf({
+const checkT: runtime.Check<T> = runtime.checkShapeOf({
     subobj: runtime.checkShapeOf({
         str: runtime.checkString
     })
 })
-export function jsonToT(js: runtime.JSONValue): T {
-    return runtime.assert(js, check_T);
+export function toT(js: runtime.JSONValue): T {
+    return runtime.assert(js, checkT);
 }
-export function jsonToTArr(js: runtime.JSONValue): Array<T> {
-    return runtime.assert(js, runtime.checkArrayOf(check_T));
+export function toTArr(js: runtime.JSONValue): Array<T> {
+    return runtime.assert(js, runtime.checkArrayOf(checkT));
 }

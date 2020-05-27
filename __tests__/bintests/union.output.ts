@@ -4,7 +4,7 @@ type UnionT = {
 } | {
     num: number;
 };
-const check_UnionT: runtime.Check<UnionT> = runtime.checkOr([
+const checkUnionT: runtime.Check<UnionT> = runtime.checkOr([
     runtime.checkShapeOf({
         str: runtime.checkString
     }),
@@ -12,9 +12,9 @@ const check_UnionT: runtime.Check<UnionT> = runtime.checkOr([
         num: runtime.checkNumber
     })
 ])
-export function jsonToUnionT(js: runtime.JSONValue): UnionT {
-    return runtime.assert(js, check_UnionT);
+export function toUnionT(js: runtime.JSONValue): UnionT {
+    return runtime.assert(js, checkUnionT);
 }
-export function jsonToUnionTArr(js: runtime.JSONValue): Array<UnionT> {
-    return runtime.assert(js, runtime.checkArrayOf(check_UnionT));
+export function toUnionTArr(js: runtime.JSONValue): Array<UnionT> {
+    return runtime.assert(js, runtime.checkArrayOf(checkUnionT));
 }

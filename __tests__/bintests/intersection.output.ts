@@ -4,7 +4,7 @@ type IntersectionT = {
 } & {
     num: number;
 };
-const check_IntersectionT: runtime.Check<IntersectionT> = runtime.checkAnd([
+const checkIntersectionT: runtime.Check<IntersectionT> = runtime.checkAnd([
     runtime.checkShapeOf({
         str: runtime.checkString
     }),
@@ -12,9 +12,9 @@ const check_IntersectionT: runtime.Check<IntersectionT> = runtime.checkAnd([
         num: runtime.checkNumber
     })
 ])
-export function jsonToIntersectionT(js: runtime.JSONValue): IntersectionT {
-    return runtime.assert(js, check_IntersectionT);
+export function toIntersectionT(js: runtime.JSONValue): IntersectionT {
+    return runtime.assert(js, checkIntersectionT);
 }
-export function jsonToIntersectionTArr(js: runtime.JSONValue): Array<IntersectionT> {
-    return runtime.assert(js, runtime.checkArrayOf(check_IntersectionT));
+export function toIntersectionTArr(js: runtime.JSONValue): Array<IntersectionT> {
+    return runtime.assert(js, runtime.checkArrayOf(checkIntersectionT));
 }

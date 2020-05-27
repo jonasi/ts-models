@@ -171,12 +171,12 @@ function makeFn( n: ts.TypeAliasDeclaration): ts.Node {
         void 0,
         [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
         void 0,
-        'jsonTo' + n.name.text,
+        'to' + ucfirst(n.name.text),
         void 0,
         [ ts.createParameter(void 0, void 0, void 0, 'js', void 0, ts.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
         ts.createTypeReferenceNode(n.name.text, void 0),
         ts.createBlock([
-            ts.createReturn(makeAssert('js', ts.createIdentifier('check_' + n.name.text))),
+            ts.createReturn(makeAssert('js', ts.createIdentifier('check' + ucfirst(n.name.text)))),
         ], true),
     );
 
@@ -188,7 +188,7 @@ function makeFnArr( n: ts.TypeAliasDeclaration): ts.Node {
         void 0,
         [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
         void 0,
-        'jsonTo' + n.name.text + 'Arr',
+        'to' + ucfirst(n.name.text) + 'Arr',
         void 0,
         [ ts.createParameter(void 0, void 0, void 0, 'js', void 0, ts.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
         ts.createTypeReferenceNode('Array', [
@@ -199,7 +199,7 @@ function makeFnArr( n: ts.TypeAliasDeclaration): ts.Node {
                 makeAssert('js', ts.createCall(
                     ts.createIdentifier('runtime.checkArrayOf'),
                     void 0,
-                    [ ts.createIdentifier('check_' + n.name.text) ]
+                    [ ts.createIdentifier('check' + ucfirst(n.name.text)) ]
                 ))
             ),
         ], true),
@@ -274,7 +274,7 @@ function makeCheckFn(name: string, ch: ts.TypeChecker, globals: Globals, typ: ts
     const check = makeCheck(ch, globals, typ);
     return ts.createVariableDeclarationList([
         ts.createVariableDeclaration(
-            'check_' + name,
+            'check' + ucfirst(name),
             ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(name, void 0) ]),
             check,
         ),
@@ -363,6 +363,10 @@ function makeAssert(arg: ts.Expression | string, check: ts.Expression): ts.CallE
         [], 
         [ typeof arg === 'string' ? ts.createIdentifier(arg) : arg, check ],
     );
+}
+
+function ucfirst(str: string): string {
+    return str[0].toUpperCase() + str.substr(1);
 }
 
 // function printNode(n: ts.Node): string {
