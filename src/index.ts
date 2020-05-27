@@ -45,10 +45,11 @@ export function checkOr<T extends [ unknown ] | unknown[]>(checks: CheckArr<T>):
     });
 }
 
+// https://stackoverflow.com/questions/50374908/transform-union-type-to-intersection-type
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends ((k: infer I) => void) ? I : never;
 
-export function checkAnd<T extends [ unknown ] | unknown[]>(checks: CheckArr<T>): UnionToIntersection<Check<T[number]>> {
+export function checkAnd<T extends [ unknown ] | unknown[]>(checks: CheckArr<T>): Check<UnionToIntersection<T[number]>> {
     // eslint-disable-next-line
     // @ts-ignore
     const id = 'and(' + checks.map(c => c.id).join(', ') + ')';
@@ -63,7 +64,7 @@ export function checkAnd<T extends [ unknown ] | unknown[]>(checks: CheckArr<T>)
             Object.assign(obj, v[0]);
         }
 
-        return [ obj ];
+        return [ obj as UnionToIntersection<T[number]> ];
     });
 }
 
