@@ -1,13 +1,13 @@
 import * as runtime from "@jonasi/ts-models";
-type T = {
+type StringT = {
     str: string;
 };
-const checkT: runtime.Check<T> = runtime.checkShapeOf({
+const checkStringT: runtime.Check<StringT> = runtime.checkShapeOf({
     str: runtime.checkString
 })
-export function toT(js: runtime.JSONValue): T {
-    return runtime.assert(js, checkT);
+export function toStringT(js: runtime.JSONValue): StringT {
+    return runtime.assert(js, checkStringT);
 }
-export function toTArr(js: runtime.JSONValue): Array<T> {
-    return runtime.assert(js, runtime.checkArrayOf(checkT));
+export function toStringTArr(js: runtime.JSONValue): Array<StringT> {
+    return runtime.assert(js, runtime.checkArrayOf(checkStringT));
 }

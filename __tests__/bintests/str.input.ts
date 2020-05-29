@@ -1,4 +1,4 @@
 // @jonasi/ts-models generate
-type T = {
+type StringT = {
     str: string;
 };

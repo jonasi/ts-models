@@ -160,3 +160,17 @@ export function checkLiteralOf<T extends JSONValue>(v: T): Check<T> {
         throw new CheckError(`Expected ${ v } and found ${ js }`, path);
     });
 }
+
+type CheckTuple<T extends [ unknown ] | unknown[]> = { [ P in keyof T ]: Check<T[P]> } & { length: number };
+
+export function checkTupleOf<T extends [ unknown ] | unknown[]>(checks: CheckTuple<T>): Check<T> {
+    return makeCheck('tuple', (js, path) => {
+        const arr = checkArray(js, path);
+        if (arr.length !== checks.length) {
+            throw new CheckError(`Expected array of length ${ checks.length }, but found array of length ${ arr.length }`, path);
+        }
+
+        // todo(isao) - fix typing
+        return arr.map((v, i) => checks[i](v, `${ path }[${ i }]`)) as T;
+    });
+}

@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import { join, dirname } from 'path';
 import { readFileSync, existsSync } from 'fs';
-// import log from '@jonasi/jslog';
+import log from '@jonasi/jslog';
 
 const virtualFile = {
     name:     '__generated__/@jonasi/ts-models/virtual_file.ts',
@@ -240,6 +240,15 @@ function isArray(ch: ts.TypeChecker, t: ts.Type): ts.Type | undefined {
     return void 0;
 }
 
+function isTuple(ch: ts.TypeChecker, t: ts.Type): readonly ts.Type[] | undefined {
+    const node = ch.typeToTypeNode(t);
+    if (isTypeReference(t) && !!node && ts.isTupleTypeNode(node)) {
+        return ch.getTypeArguments(t);
+    }
+
+    return void 0;
+}
+
 function isObject(t: ts.Type): t is ts.ObjectType {
     return !!(t.flags & ts.TypeFlags.Object);
 }
@@ -304,6 +313,13 @@ function makeCheck(ch: ts.TypeChecker, globals: Globals, typ: ts.Type): ts.Expre
         const arg = ts.createIdentifier(ch.typeToString(typ));
         return ts.createCall(
             ts.createIdentifier('runtime.checkLiteralOf'), [], [ arg ],
+        );
+    }
+    const eltyps = isTuple(ch, typ);
+    if (eltyps) {
+        const arg = ts.createArrayLiteral(eltyps.map(typ => makeCheck(ch, globals, typ)), true);
+        return ts.createCall(
+            ts.createIdentifier('runtime.checkTupleOf'), [], [ arg ]
         );
     }
 

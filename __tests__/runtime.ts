@@ -1,4 +1,4 @@
-import { assert, checkShapeOf, checkString, checkNumber, JSONValue, Check, checkDate, checkArray, checkArrayOf, CheckError } from '../src/index';
+import { assert, checkShapeOf, checkString, checkNumber, JSONValue, Check, checkDate, checkArray, checkArrayOf, CheckError, checkTupleOf } from '../src/index';
 
 const valueTests: { type: string, it: string, input: JSONValue | undefined, check: Check<unknown>, output?: unknown, error?: string }[] = [
     { type: 'string', it: 'should pass through', check: checkString, input: 'str', output: 'str' },
@@ -24,6 +24,9 @@ const valueTests: { type: string, it: string, input: JSONValue | undefined, chec
     { type: 'arrayOf', it: 'should default to an empty array (null)', check: checkArrayOf(checkString), input: null, output: [] },
     { type: 'arrayOf', it: 'should work (strings)', check: checkArrayOf(checkString), input: [ 'str', 'str' ], output: [ 'str', 'str' ] },
     { type: 'arrayOf', it: 'should throw (strings)', check: checkArrayOf(checkString), input: [ 3, 'str' ], error: '[0]' },
+    { type: 'tupleOf', it: 'should work string', check: checkTupleOf([ checkString ]), input: [ 'nice' ], output: [ 'nice' ] },
+    { type: 'tupleOf', it: 'should throw on length mismatch', check: checkTupleOf([ checkString ]), input: [ 'nice', 'one' ], error: '' },
+    { type: 'tupleOf', it: 'should throw on type mismatch', check: checkTupleOf([ checkString ]), input: [ 3 ], error: '[0]' },
 ];
 
 valueTests.forEach(t => {
