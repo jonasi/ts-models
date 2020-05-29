@@ -1,3 +1,3 @@
-type T = {
+type NoT = {
     str: string;
 };

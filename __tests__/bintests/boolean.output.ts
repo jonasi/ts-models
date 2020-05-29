@@ -1,13 +1,13 @@
 import * as runtime from "@jonasi/ts-models";
-type T = {
+type BooleanT = {
     b: boolean;
 };
-const checkT: runtime.Check<T> = runtime.checkShapeOf({
+const checkBooleanT: runtime.Check<BooleanT> = runtime.checkShapeOf({
     b: runtime.checkBoolean
 })
-export function toT(js: runtime.JSONValue): T {
-    return runtime.assert(js, checkT);
+export function toBooleanT(js: runtime.JSONValue): BooleanT {
+    return runtime.assert(js, checkBooleanT);
 }
-export function toTArr(js: runtime.JSONValue): Array<T> {
-    return runtime.assert(js, runtime.checkArrayOf(checkT));
+export function toBooleanTArr(js: runtime.JSONValue): Array<BooleanT> {
+    return runtime.assert(js, runtime.checkArrayOf(checkBooleanT));
 }

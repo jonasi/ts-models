@@ -1,16 +1,16 @@
 import * as runtime from "@jonasi/ts-models";
-type T = {
+type OptionalT = {
     str?: string;
 };
-const checkT: runtime.Check<T> = runtime.checkShapeOf({
+const checkOptionalT: runtime.Check<OptionalT> = runtime.checkShapeOf({
     str: runtime.checkOr([
         runtime.checkEmpty,
         runtime.checkString
     ])
 })
-export function toT(js: runtime.JSONValue): T {
-    return runtime.assert(js, checkT);
+export function toOptionalT(js: runtime.JSONValue): OptionalT {
+    return runtime.assert(js, checkOptionalT);
 }
-export function toTArr(js: runtime.JSONValue): Array<T> {
-    return runtime.assert(js, runtime.checkArrayOf(checkT));
+export function toOptionalTArr(js: runtime.JSONValue): Array<OptionalT> {
+    return runtime.assert(js, runtime.checkArrayOf(checkOptionalT));
 }

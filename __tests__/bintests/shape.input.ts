@@ -1,5 +1,5 @@
 // @jonasi/ts-models generate
-type T = {
+type ShapeT = {
     subobj: {
         str: string;
     }

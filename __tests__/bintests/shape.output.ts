@@ -1,17 +1,17 @@
 import * as runtime from "@jonasi/ts-models";
-type T = {
+type ShapeT = {
     subobj: {
         str: string;
     };
 };
-const checkT: runtime.Check<T> = runtime.checkShapeOf({
+const checkShapeT: runtime.Check<ShapeT> = runtime.checkShapeOf({
     subobj: runtime.checkShapeOf({
         str: runtime.checkString
     })
 })
-export function toT(js: runtime.JSONValue): T {
-    return runtime.assert(js, checkT);
+export function toShapeT(js: runtime.JSONValue): ShapeT {
+    return runtime.assert(js, checkShapeT);
 }
-export function toTArr(js: runtime.JSONValue): Array<T> {
-    return runtime.assert(js, runtime.checkArrayOf(checkT));
+export function toShapeTArr(js: runtime.JSONValue): Array<ShapeT> {
+    return runtime.assert(js, runtime.checkArrayOf(checkShapeT));
 }
