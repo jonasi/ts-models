@@ -1,7 +1,7 @@
 import * as ts from 'typescript';
 import { join, dirname } from 'path';
 import { readFileSync, existsSync } from 'fs';
-import log from '@jonasi/jslog';
+// import log from '@jonasi/jslog';
 
 const virtualFile = {
     name:     '__generated__/@jonasi/ts-models/virtual_file.ts',
@@ -146,9 +146,12 @@ function makeHeader(): ts.Node[] {
 }
 
 function makeDef(ch: ts.TypeChecker, globals: Globals, n: ts.TypeAliasDeclaration): ts.Node[] {
+    const [ checkFn, deps ] = makeCheckFn(n.name.text, ch, globals, n.type);
+    const allTypes = [ n, ...deps ].filter((t, i, arr) => arr.indexOf(t) === i);
+
     return [
-        makeType(n),
-        makeCheckFn(n.name.text, ch, globals, ch.getTypeAtLocation(n.type)),
+        ...allTypes.map(n => makeType(n)),
+        checkFn,
         makeFn(n),
         makeFnArr(n),
     ];
@@ -166,7 +169,7 @@ function makeType(n: ts.TypeAliasDeclaration): ts.Node {
     return al;
 }
 
-function makeFn( n: ts.TypeAliasDeclaration): ts.Node {
+function makeFn(n: ts.TypeAliasDeclaration): ts.Node {
     const fn = ts.createFunctionDeclaration(
         void 0,
         [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
@@ -183,7 +186,7 @@ function makeFn( n: ts.TypeAliasDeclaration): ts.Node {
     return fn;
 }
 
-function makeFnArr( n: ts.TypeAliasDeclaration): ts.Node {
+function makeFnArr(n: ts.TypeAliasDeclaration): ts.Node {
     const fn = ts.createFunctionDeclaration(
         void 0,
         [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
@@ -231,19 +234,17 @@ function isUndefined(t: ts.Type): boolean {
     return !!(t.flags & ts.TypeFlags.Undefined);
 }
 
-function isArray(ch: ts.TypeChecker, t: ts.Type): ts.Type | undefined {
-    const node = ch.typeToTypeNode(t);
+function isArray(t: ts.Type, node: ts.Node): ts.TypeNode | undefined {
     if (isTypeReference(t) && !!node && ts.isArrayTypeNode(node)) {
-        return ch.getTypeArguments(t)[0];
+        return node.elementType;
     }
 
     return void 0;
 }
 
-function isTuple(ch: ts.TypeChecker, t: ts.Type): readonly ts.Type[] | undefined {
-    const node = ch.typeToTypeNode(t);
+function isTuple(t: ts.Type, node: ts.TypeNode): readonly ts.TypeNode[] | undefined {
     if (isTypeReference(t) && !!node && ts.isTupleTypeNode(node)) {
-        return ch.getTypeArguments(t);
+        return node.elementTypes;
     }
 
     return void 0;
@@ -279,95 +280,155 @@ function isTypeReference(t: ts.Type): t is ts.TypeReference {
     return isObject(t) && !!(t.objectFlags & ts.ObjectFlags.Reference);
 }
 
-function makeCheckFn(name: string, ch: ts.TypeChecker, globals: Globals, typ: ts.Type): ts.VariableDeclarationList {
-    const check = makeCheck(ch, globals, typ);
-    return ts.createVariableDeclarationList([
-        ts.createVariableDeclaration(
-            'check' + ucfirst(name),
-            ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(name, void 0) ]),
-            check,
-        ),
-    ], ts.NodeFlags.Const);
+function makeCheckFn(name: string, ch: ts.TypeChecker, globals: Globals, node: ts.TypeNode): [ ts.VariableDeclarationList, ts.TypeAliasDeclaration[] ] {
+    const [ check, deps ] = makeCheck(ch, globals, node);
+    return [
+        ts.createVariableDeclarationList([
+            ts.createVariableDeclaration(
+                'check' + ucfirst(name),
+                ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(name, void 0) ]),
+                check,
+            ),
+        ], ts.NodeFlags.Const),
+        deps,
+    ];
 }
 
-function makeCheck(ch: ts.TypeChecker, globals: Globals, typ: ts.Type): ts.Expression {
+function makeCheck(ch: ts.TypeChecker, globals: Globals, node: ts.TypeNode, optional = false): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    if (optional) {
+        const [ check, deps ] = makeCheck(ch, globals, node, false);
+        const arg = ts.createArrayLiteral([
+            ts.createIdentifier('runtime.checkEmpty'),
+            check,
+        ], true);
+        return [ 
+            ts.createCall(
+                ts.createIdentifier('runtime.checkOr'), [], [ arg ],
+            ),
+            deps,
+        ];
+    }
+
+    const typ = ch.getTypeAtLocation(node);
+    let deps: ts.TypeAliasDeclaration[] = [];
+    if (typ.aliasSymbol) {
+        deps = [ typ.aliasSymbol.declarations[0] as ts.TypeAliasDeclaration ];
+    }
+
     if (isBoolean(typ)) {
-        return ts.createIdentifier('runtime.checkBoolean');
+        return [ ts.createIdentifier('runtime.checkBoolean'), deps ];
     }
     if (isString(typ)) {
-        return ts.createIdentifier('runtime.checkString');
+        return [ ts.createIdentifier('runtime.checkString'), deps ];
     }
     if (isNumber(typ)) {
-        return ts.createIdentifier('runtime.checkNumber');
+        return [ ts.createIdentifier('runtime.checkNumber'), deps ];
     }
     if (isUndefined(typ)) {
-        return ts.createIdentifier('runtime.checkEmpty');
+        return [ ts.createIdentifier('runtime.checkEmpty'), deps ];
     }
 
     if (typ === globals.Date) {
-        return ts.createIdentifier('runtime.checkDate');
+        return [ ts.createIdentifier('runtime.checkDate'), deps ];
     }
 
     const ok = isLiteral(ch, typ);
     if (ok) {
         const arg = ts.createIdentifier(ch.typeToString(typ));
-        return ts.createCall(
-            ts.createIdentifier('runtime.checkLiteralOf'), [], [ arg ],
-        );
+        return [ 
+            ts.createCall(
+                ts.createIdentifier('runtime.checkLiteralOf'), [], [ arg ],
+            ), 
+            deps, 
+        ];
     }
-    const eltyps = isTuple(ch, typ);
+    const eltyps = isTuple(typ, node);
     if (eltyps) {
-        const arg = ts.createArrayLiteral(eltyps.map(typ => makeCheck(ch, globals, typ)), true);
-        return ts.createCall(
-            ts.createIdentifier('runtime.checkTupleOf'), [], [ arg ]
-        );
+        const arg = ts.createArrayLiteral(eltyps.map(typ => {
+            const [ t, d2 ] = makeCheck(ch, globals, typ);
+            deps = [ ...deps, ...d2 ];
+            return t;
+        }), true);
+        return [
+            ts.createCall(
+                ts.createIdentifier('runtime.checkTupleOf'), [], [ arg ]
+            ),
+            deps,
+        ];
     }
 
-    const eltyp = isArray(ch, typ);
+    const eltyp = isArray(typ, node);
     if (eltyp) {
-        const arg = makeCheck(ch, globals, eltyp);
-        return ts.createCall(
-            ts.createIdentifier('runtime.checkArrayOf'), [], [ arg ],
-        );
+        const [ arg, d2 ] = makeCheck(ch, globals, eltyp);
+        return [
+            ts.createCall(
+                ts.createIdentifier('runtime.checkArrayOf'), [], [ arg ],
+            ),
+            [ ...deps, ...d2 ],
+        ];
     } 
 
     if (isObject(typ)) {
-        const node = ch.typeToTypeNode(typ);
-        if (!node) {
-            throw new Error("Error converting type to node");
-        }
-
         const assignments: ts.ObjectLiteralElementLike[] = [];
         const props = typ.getProperties();
         for (const k in props) {
-            const elT = ch.getTypeAtLocation(props[k].valueDeclaration);
-            const check = makeCheck(ch, globals, elT);
+            if (props[k].valueDeclaration.kind !== ts.SyntaxKind.PropertySignature) {
+                continue;
+            }
+
+            const ps = props[k].valueDeclaration as ts.PropertySignature;
+            const subnode = ps.type;
+            if (!subnode) {
+                throw new Error("WTF");
+            }
+
+            const optional = !!(props[k].flags & ts.SymbolFlags.Optional);
+
+            const [ check, d2 ] = makeCheck(ch, globals, subnode, optional);
+            deps = [ ...deps, ...d2 ];
 
             assignments.push(ts.createPropertyAssignment(props[k].name, check));
         }
 
         const arg = ts.createObjectLiteral(assignments, true);
-        return ts.createCall(
-            ts.createIdentifier('runtime.checkShapeOf'), [], [ arg ],
-        );
+        return [
+            ts.createCall(
+                ts.createIdentifier('runtime.checkShapeOf'), [], [ arg ],
+            ),
+            deps,
+        ];
     }
 
-    if (typ.isUnion()) {
-        const args = typ.types.map(t => makeCheck(ch, globals, t));
+    if (ts.isUnionTypeNode(node)) {
+        const args = node.types.map(t => {
+            const [ check, d2 ] = makeCheck(ch, globals, t);
+            deps = [ ...deps, ...d2 ];
+            return check;
+        });
         const arg = ts.createArrayLiteral(args as ts.Expression[], true);
 
-        return ts.createCall(
-            ts.createIdentifier('runtime.checkOr'), [], [ arg ],
-        );
+        return [
+            ts.createCall(
+                ts.createIdentifier('runtime.checkOr'), [], [ arg ],
+            ),
+            deps,
+        ];
     }
 
-    if (typ.isIntersection()) {
-        const args = typ.types.map(t => makeCheck(ch, globals, t));
+    if (ts.isIntersectionTypeNode(node)) {
+        const args = node.types.map(t => {
+            const [ check, d2 ] = makeCheck(ch, globals, t);
+            deps = [ ...deps, ...d2 ];
+            return check;
+        });
 
         const arg = ts.createArrayLiteral(args as ts.Expression[], true);
-        return ts.createCall(
-            ts.createIdentifier('runtime.checkAnd'), [], [ arg ],
-        );
+        return [
+            ts.createCall(
+                ts.createIdentifier('runtime.checkAnd'), [], [ arg ],
+            ),
+            deps,
+        ];
     }
 
     throw new Error("Invalid type at " + ch.typeToString(typ));
@@ -385,7 +446,8 @@ function ucfirst(str: string): string {
     return str[0].toUpperCase() + str.substr(1);
 }
 
-// function printNode(n: ts.Node): string {
-//     const printer = ts.createPrinter();
-//     return printer.printNode(ts.EmitHint.Unspecified, n, ts.createSourceFile('', '', ts.ScriptTarget.ES2015, void 0, void 0));
-// }
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function printNode(n: ts.Node): string {
+    const printer = ts.createPrinter();
+    return printer.printNode(ts.EmitHint.Unspecified, n, ts.createSourceFile('', '', ts.ScriptTarget.ES2015, void 0, void 0));
+}
