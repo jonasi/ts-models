@@ -174,3 +174,18 @@ export function checkTupleOf<T extends [ unknown ] | unknown[]>(checks: CheckTup
         return arr.map((v, i) => checks[i](v, `${ path }[${ i }]`)) as T;
     });
 }
+
+export function checkDeferred<T>(check: () => Check<T>): Check<T> {
+    let ch: Check<T> | undefined;
+
+    const ret = makeCheck('deferred', (id, js) => {
+        if (!ch) {
+            ch = check();
+            ret.id = ch.id;
+        }
+
+        return ch(id, js);
+    });
+
+    return ret;
+}

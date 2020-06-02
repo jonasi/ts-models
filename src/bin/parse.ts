@@ -123,7 +123,8 @@ function createModels(prog: ts.Program): ts.Node[] {
     const globals = getGlobals(prog);
     const types = parseModels(prog);
     const header = types.length ? makeHeader() : [];
-    const defs = types.map(t => makeDef(ch, globals, t)).flat();
+    const allChecks: Map<ts.Type, string> = new Map();
+    const defs = types.map(t => makeDef(allChecks, ch, globals, t)).flat();
 
     return [
         ...header,
@@ -145,8 +146,8 @@ function makeHeader(): ts.Node[] {
     ];
 }
 
-function makeDef(ch: ts.TypeChecker, globals: Globals, n: ts.TypeAliasDeclaration): ts.Node[] {
-    const [ checkFn, deps ] = makeCheckFn(n.name.text, ch, globals, n.type);
+function makeDef(allChecks: Map<ts.Type, string>, ch: ts.TypeChecker, globals: Globals, n: ts.TypeAliasDeclaration): ts.Node[] {
+    const [ checkFn, deps ] = makeCheckFn(allChecks, n.name.text, ch, globals, n.type);
     const allTypes = [ n, ...deps ].filter((t, i, arr) => arr.indexOf(t) === i);
 
     return [
@@ -280,12 +281,15 @@ function isTypeReference(t: ts.Type): t is ts.TypeReference {
     return isObject(t) && !!(t.objectFlags & ts.ObjectFlags.Reference);
 }
 
-function makeCheckFn(name: string, ch: ts.TypeChecker, globals: Globals, node: ts.TypeNode): [ ts.VariableDeclarationList, ts.TypeAliasDeclaration[] ] {
-    const [ check, deps ] = makeCheck(ch, globals, node);
+function makeCheckFn(allChecks: Map<ts.Type, string>, name: string, ch: ts.TypeChecker, globals: Globals, node: ts.TypeNode): [ ts.VariableDeclarationList, ts.TypeAliasDeclaration[] ] {
+    const checkName = 'check' + ucfirst(name);
+    allChecks.set(ch.getTypeFromTypeNode(node), checkName);
+
+    const [ check, deps ] = makeCheck(allChecks, ch, globals, node, false, true);
     return [
         ts.createVariableDeclarationList([
             ts.createVariableDeclaration(
-                'check' + ucfirst(name),
+                checkName,
                 ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(name, void 0) ]),
                 check,
             ),
@@ -294,9 +298,9 @@ function makeCheckFn(name: string, ch: ts.TypeChecker, globals: Globals, node: t
     ];
 }
 
-function makeCheck(ch: ts.TypeChecker, globals: Globals, node: ts.TypeNode, optional = false): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+function makeCheck(allChecks: Map<ts.Type, string>, ch: ts.TypeChecker, globals: Globals, node: ts.TypeNode, optional = false, skipExisting = false): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
     if (optional) {
-        const [ check, deps ] = makeCheck(ch, globals, node, false);
+        const [ check, deps ] = makeCheck(allChecks, ch, globals, node, false);
         const arg = ts.createArrayLiteral([
             ts.createIdentifier('runtime.checkEmpty'),
             check,
@@ -310,6 +314,28 @@ function makeCheck(ch: ts.TypeChecker, globals: Globals, node: ts.TypeNode, opti
     }
 
     const typ = ch.getTypeAtLocation(node);
+
+    if (!skipExisting) {
+        const existing = allChecks.get(typ);
+        if (existing) {
+            return [ 
+                ts.createCall(
+                    ts.createIdentifier('runtime.checkDeferred'), [], [ 
+                        ts.createArrowFunction(
+                            void 0,
+                            void 0,
+                            [],
+                            void 0,
+                            void 0,
+                            ts.createIdentifier(existing),
+                        ),
+                    ]
+                ),
+                [],
+            ];
+        }
+    }
+
     let deps: ts.TypeAliasDeclaration[] = [];
     if (typ.aliasSymbol) {
         deps = [ typ.aliasSymbol.declarations[0] as ts.TypeAliasDeclaration ];
@@ -345,7 +371,7 @@ function makeCheck(ch: ts.TypeChecker, globals: Globals, node: ts.TypeNode, opti
     const eltyps = isTuple(typ, node);
     if (eltyps) {
         const arg = ts.createArrayLiteral(eltyps.map(typ => {
-            const [ t, d2 ] = makeCheck(ch, globals, typ);
+            const [ t, d2 ] = makeCheck(allChecks, ch, globals, typ);
             deps = [ ...deps, ...d2 ];
             return t;
         }), true);
@@ -359,7 +385,7 @@ function makeCheck(ch: ts.TypeChecker, globals: Globals, node: ts.TypeNode, opti
 
     const eltyp = isArray(typ, node);
     if (eltyp) {
-        const [ arg, d2 ] = makeCheck(ch, globals, eltyp);
+        const [ arg, d2 ] = makeCheck(allChecks, ch, globals, eltyp);
         return [
             ts.createCall(
                 ts.createIdentifier('runtime.checkArrayOf'), [], [ arg ],
@@ -384,7 +410,7 @@ function makeCheck(ch: ts.TypeChecker, globals: Globals, node: ts.TypeNode, opti
 
             const optional = !!(props[k].flags & ts.SymbolFlags.Optional);
 
-            const [ check, d2 ] = makeCheck(ch, globals, subnode, optional);
+            const [ check, d2 ] = makeCheck(allChecks, ch, globals, subnode, optional);
             deps = [ ...deps, ...d2 ];
 
             assignments.push(ts.createPropertyAssignment(props[k].name, check));
@@ -401,7 +427,7 @@ function makeCheck(ch: ts.TypeChecker, globals: Globals, node: ts.TypeNode, opti
 
     if (ts.isUnionTypeNode(node)) {
         const args = node.types.map(t => {
-            const [ check, d2 ] = makeCheck(ch, globals, t);
+            const [ check, d2 ] = makeCheck(allChecks, ch, globals, t);
             deps = [ ...deps, ...d2 ];
             return check;
         });
@@ -417,7 +443,7 @@ function makeCheck(ch: ts.TypeChecker, globals: Globals, node: ts.TypeNode, opti
 
     if (ts.isIntersectionTypeNode(node)) {
         const args = node.types.map(t => {
-            const [ check, d2 ] = makeCheck(ch, globals, t);
+            const [ check, d2 ] = makeCheck(allChecks, ch, globals, t);
             deps = [ ...deps, ...d2 ];
             return check;
         });
