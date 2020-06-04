@@ -152,7 +152,7 @@ function isUndefined(t: ts.Type): boolean {
 }
 
 function isArray(t: ts.Type, node: ts.Node): ts.TypeNode | undefined {
-    if (isTypeReference(t) && !!node && ts.isArrayTypeNode(node)) {
+    if (!!node && ts.isArrayTypeNode(node)) {
         return node.elementType;
     }
 
