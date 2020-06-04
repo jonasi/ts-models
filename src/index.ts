@@ -159,7 +159,7 @@ export function checkShapeOf<T extends Record<string, unknown>>(checks: ShapeChe
         }
 
         for (const k in checks) {
-            if (ret[k]) {
+            if (k in ret) {
                 continue;
             }
 
