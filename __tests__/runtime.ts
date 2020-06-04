@@ -1,4 +1,4 @@
-import { assert, checkShapeOf, checkString, checkNumber, JSONValue, Check, checkDate, checkArray, checkArrayOf, CheckError, checkTupleOf } from '../src/index';
+import { assert, checkShapeOf, checkString, checkNumber, JSONValue, Check, checkDate, checkArray, checkArrayOf, CheckError, checkTupleOf, toLowerSnake } from '../src/index';
 
 const valueTests: { type: string, it: string, input: JSONValue | undefined, check: Check<unknown>, output?: unknown, error?: string }[] = [
     { type: 'string', it: 'should pass through', check: checkString, input: 'str', output: 'str' },
@@ -27,6 +27,7 @@ const valueTests: { type: string, it: string, input: JSONValue | undefined, chec
     { type: 'tupleOf', it: 'should work string', check: checkTupleOf([ checkString ]), input: [ 'nice' ], output: [ 'nice' ] },
     { type: 'tupleOf', it: 'should throw on length mismatch', check: checkTupleOf([ checkString ]), input: [ 'nice', 'one' ], error: '' },
     { type: 'tupleOf', it: 'should throw on type mismatch', check: checkTupleOf([ checkString ]), input: [ 3 ], error: '[0]' },
+    { type: 'propertyMappers', it: 'should map properties', check: checkShapeOf({ obj_id: checkString }, { propertyMapper: toLowerSnake }), input: { ObjID: 'id' }, output: { obj_id: 'id' } },
 ];
 
 valueTests.forEach(t => {

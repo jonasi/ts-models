@@ -20,6 +20,8 @@ export class CheckError extends Error {
 
 type CheckArr<T extends [ unknown ] | unknown[]> = { [P in keyof T]: Check<T[P]> };
 
+export type PropertyMapper = (property: string) => string;
+
 export function assert<T>(js: JSONValue, check: Check<T>): T {
     return check(js, '');
 }
@@ -138,12 +140,30 @@ export function checkArrayOf<T>(check: Check<T>): Check<T[]> {
 
 type ShapeCheck<T extends Record<string, unknown>> = { [P in keyof T]: Check<T[P]> };
 
-export function checkShapeOf<T extends Record<string, unknown>>(checks: ShapeCheck<T>): Check<T> {
+type ShapeOfOptions = {
+    propertyMapper: PropertyMapper;
+};
+
+export function checkShapeOf<T extends Record<string, unknown>>(checks: ShapeCheck<T>, options?: ShapeOfOptions): Check<T> {
     return makeCheck('shapeOf', (js, path) => {
         const obj = checkObject(js, path);
         const ret: Partial<T> = {};
+        for (const k in obj) {
+            const prop = options?.propertyMapper(k) || k as keyof T;
+            if (!checks[prop]) {
+                continue;
+            }
+
+            const v = checks[prop](obj[k], `${ path }.${ prop }`);
+            ret[prop] = v;
+        }
+
         for (const k in checks) {
-            const v = checks[k](obj[k], `${ path }.${ k }`);
+            if (ret[k]) {
+                continue;
+            }
+
+            const v = checks[k](void 0, `${ path }.${ k }`);
             ret[k] = v;
         }
 
@@ -188,4 +208,12 @@ export function checkDeferred<T>(check: () => Check<T>): Check<T> {
     });
 
     return ret;
+}
+
+export function toLower(str: string): string {
+    return str.toLowerCase();
+}
+
+export function toLowerSnake(str: string): string {
+    return str.replace(/[a-z][A-Z]/, v => v[0] + '_' + v[1].toLowerCase()).toLowerCase();
 }
