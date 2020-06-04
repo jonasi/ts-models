@@ -1,9 +1,9 @@
 {
   "name": "@jonasi/ts-models",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "main": "dist/index.js",
   "bin": {
-    "ts-models-generate": "./dist/bin/index.js"
+    "ts-models-generate": "./dist/bin.js"
   },
   "license": "MIT",
   "devDependencies": {
@@ -19,6 +19,8 @@
     "shell-quote": "^1.7.2",
     "ts-jest": "^26.1.0",
     "ts-node": "^8.10.2",
-    "typescript": "^3.9.3"
+    "typescript": "^3.9.3",
+    "webpack": "^4.43.0",
+    "webpack-cli": "^3.3.11"
   }
 }

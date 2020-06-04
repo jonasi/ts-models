@@ -1,5 +1,3 @@
-#! /usr/bin/env node
-
 import { argv } from 'process';
 import { resolve } from 'path';
 import { generateModels } from './parse';
