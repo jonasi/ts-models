@@ -3,7 +3,7 @@
 build:
 	./node_modules/.bin/tsc
 	./node_modules/.bin/webpack --entry ./dist/bin/index.js --output ./dist/bin.js --target node --mode production --progress --colors
-	echo "# /usr/bin/env node\n\n$$(cat ./dist/bin.js)" > ./dist/bin.js
+	echo "#! /usr/bin/env node\n\n$$(cat ./dist/bin.js)" > ./dist/bin.js
 
 watch:
 	./node_modules/.bin/tsc --watch
