@@ -195,6 +195,20 @@ export function checkTupleOf<T extends [ unknown ] | unknown[]>(checks: CheckTup
     });
 }
 
+export function checkRecordOf<V>(check: Check<V>, options?: { propertyMapper: PropertyMapper } ): Check<Record<string, V>> {
+    return makeCheck('record', (js, path) => {
+        const obj = checkObject(js, path);
+        const ret: Record<string, V> = {};
+
+        for (const k in obj) {
+            const prop = options?.propertyMapper(k) || k;
+            ret[prop] = check(obj[k], `${ path }.${ prop }`);
+        }
+
+        return ret;
+    });
+}
+
 export function checkDeferred<T>(check: () => Check<T>): Check<T> {
     let ch: Check<T> | undefined;
 

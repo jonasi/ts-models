@@ -167,6 +167,14 @@ function isTuple(t: ts.Type, node: ts.TypeNode): readonly ts.TypeNode[] | undefi
     return void 0;
 }
 
+function isRecord(ctx: Context, t: ts.Type): boolean {
+    return t.aliasSymbol === ctx.globals.Record.aliasSymbol;
+}
+
+function isDate(ctx: Context, t: ts.Type): boolean {
+    return t === ctx.globals.Date;
+}
+
 function isObject(t: ts.Type): t is ts.ObjectType {
     return !!(t.flags & ts.TypeFlags.Object);
 }
@@ -253,6 +261,18 @@ function makeCheck(ctx: Context, node: ts.TypeNode, optional = false, skipExisti
     }
 
     let deps: ts.TypeAliasDeclaration[] = [];
+    if (isRecord(ctx, typ)) {
+        const eltyp = ((node as ts.NodeWithTypeArguments).typeArguments as ts.NodeArray<ts.TypeNode>)[1];
+
+        const [ arg, d2 ] = makeCheck(ctx, eltyp);
+        return [ 
+            ts.createCall(
+                ts.createIdentifier('runtime.checkRecordOf'), [], [ arg ],
+            ),
+            [ ...deps, ...d2 ],
+        ];
+    }
+
     if (typ.aliasSymbol) {
         deps = [ typ.aliasSymbol.declarations[0] as ts.TypeAliasDeclaration ];
     }
@@ -270,7 +290,7 @@ function makeCheck(ctx: Context, node: ts.TypeNode, optional = false, skipExisti
         return [ ts.createIdentifier('runtime.checkEmpty'), deps ];
     }
 
-    if (typ === ctx.globals.Date) {
+    if (isDate(ctx, typ)) {
         return [ ts.createIdentifier('runtime.checkDate'), deps ];
     }
 

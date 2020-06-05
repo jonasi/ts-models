@@ -4,12 +4,14 @@ import { readFileSync, existsSync } from 'fs';
 
 export type Globals = {
     Date: ts.Type,
+    Record: ts.Type,
 };
 
 export const virtualFile = {
     name:     '__generated__/@jonasi/ts-models/virtual_file.ts',
     contents: `
 declare var date: Date;
+declare var rec: Record<string, unknown>;
 `,
 };
 
@@ -53,6 +55,9 @@ export function getGlobals(prog: ts.Program): Globals {
     return {
         Date: ch.getTypeFromTypeNode(
             (vf.statements[0] as ts.VariableStatement).declarationList.declarations[0].type as ts.TypeNode
+        ),
+        Record: ch.getTypeFromTypeNode(
+            (vf.statements[1] as ts.VariableStatement).declarationList.declarations[0].type as ts.TypeNode
         ),
     };
 }
