@@ -1,6 +1,7 @@
 import * as ts from 'typescript';
 import { join, dirname } from 'path';
 import { readFileSync, existsSync } from 'fs';
+// import log from '@jonasi/jslog';
 
 export type Globals = {
     Date: ts.Type,
@@ -27,7 +28,19 @@ export default function createProgram(file: string): ts.Program {
         return old(f);
     };
 
-    return ts.createProgram([ file, virtualFile.name ], conf.options, host);
+    const prog = ts.createProgram([ file, virtualFile.name ], conf.options, host);
+    const diagnostics = ts.getPreEmitDiagnostics(prog);
+
+    if (diagnostics.length) {
+        const hasError = !!diagnostics.find(d => d.category === ts.DiagnosticCategory.Error);
+        if (hasError) {
+            // throw new Error('Errors found in program: \n' + ts.formatDiagnosticsWithColorAndContext(diagnostics, host));
+        }
+
+        // log.warn('Program diagnostics', ts.formatDiagnosticsWithColorAndContext(diagnostics, host));
+    }
+
+    return prog;
 }
 
 function loadConfig(root: string): ts.ParsedCommandLine {

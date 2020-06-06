@@ -1,12 +1,9 @@
 .PHONY: build watch clean test test_watch
 
 build:
+	./node_modules/.bin/eslint '**/*.ts'
 	./node_modules/.bin/tsc
-	./node_modules/.bin/webpack --entry ./dist/bin/index.js --output ./dist/bin.js --target node --mode none --progress --colors
-	echo "#! /usr/bin/env node\n" | cat - ./dist/bin.js > ./dist/bin2.js
-	mv ./dist/bin2.js ./dist/bin.js
-	chmod +x ./dist/bin.js
-	rm -rf ./dist/bin
+	chmod +x ./dist/bin/index.js
 
 watch:
 	./node_modules/.bin/tsc --watch

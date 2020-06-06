@@ -2,6 +2,7 @@ import * as ts from 'typescript';
 import parseProgram from './parse_program';
 import createProgram, { getGlobals, Globals } from './create_program';
 import { fileToString } from './print';
+// import log from '@jonasi/jslog';
 
 export function generateModels(file: string): string {
     const prog = createProgram(file);
@@ -151,24 +152,16 @@ function isUndefined(t: ts.Type): boolean {
     return !!(t.flags & ts.TypeFlags.Undefined);
 }
 
-function isArray(t: ts.Type, node: ts.Node): ts.TypeNode | undefined {
-    if (!!node && ts.isArrayTypeNode(node)) {
-        return node.elementType;
-    }
-
-    return void 0;
+function isArray(t: ts.Type, node: ts.Node): node is ts.ArrayTypeNode {
+    return !!node && ts.isArrayTypeNode(node);
 }
 
-function isTuple(t: ts.Type, node: ts.TypeNode): readonly ts.TypeNode[] | undefined {
-    if (isTypeReference(t) && !!node && ts.isTupleTypeNode(node)) {
-        return node.elementTypes;
-    }
-
-    return void 0;
+function isTuple(t: ts.Type, node: ts.TypeNode): node is ts.TupleTypeNode {
+    return isTypeReference(t) && !!node && ts.isTupleTypeNode(node);
 }
 
 function isRecord(ctx: Context, t: ts.Type): boolean {
-    return t.aliasSymbol === ctx.globals.Record.aliasSymbol;
+    return !!t.aliasSymbol && t.aliasSymbol === ctx.globals.Record.aliasSymbol;
 }
 
 function isDate(ctx: Context, t: ts.Type): boolean {
@@ -238,39 +231,17 @@ function makeCheck(ctx: Context, node: ts.TypeNode, optional = false, skipExisti
     }
 
     const typ = ctx.checker.getTypeFromTypeNode(node);
+    let deps: ts.TypeAliasDeclaration[] = [];
 
     if (!skipExisting) {
         const existing = ctx.allChecks.get(typ);
         if (existing) {
-            return [ 
-                ts.createCall(
-                    ts.createIdentifier('runtime.checkDeferred'), [], [ 
-                        ts.createArrowFunction(
-                            void 0,
-                            void 0,
-                            [],
-                            void 0,
-                            void 0,
-                            ts.createIdentifier(existing),
-                        ),
-                    ]
-                ),
-                [],
-            ];
+            return makeCheckDeferred(ctx, existing, deps);
         }
     }
 
-    let deps: ts.TypeAliasDeclaration[] = [];
     if (isRecord(ctx, typ)) {
-        const eltyp = ((node as ts.NodeWithTypeArguments).typeArguments as ts.NodeArray<ts.TypeNode>)[1];
-
-        const [ arg, d2 ] = makeCheck(ctx, eltyp);
-        return [ 
-            ts.createCall(
-                ts.createIdentifier('runtime.checkRecordOf'), [], [ arg ],
-            ),
-            [ ...deps, ...d2 ],
-        ];
+        return makeCheckRecordOf(ctx, node, deps);
     }
 
     if (typ.aliasSymbol) {
@@ -278,135 +249,37 @@ function makeCheck(ctx: Context, node: ts.TypeNode, optional = false, skipExisti
     }
 
     if (isBoolean(typ)) {
-        return [ ts.createIdentifier('runtime.checkBoolean'), deps ];
+        return makeCheckBoolean(deps);
     }
     if (isString(typ)) {
-        return [ ts.createIdentifier('runtime.checkString'), deps ];
+        return makeCheckString(deps);
     }
     if (isNumber(typ)) {
-        return [ ts.createIdentifier('runtime.checkNumber'), deps ];
+        return makeCheckNumber(deps);
     }
     if (isUndefined(typ)) {
-        return [ ts.createIdentifier('runtime.checkEmpty'), deps ];
+        return makeCheckEmpty(deps);
     }
-
     if (isDate(ctx, typ)) {
-        return [ ts.createIdentifier('runtime.checkDate'), deps ];
+        return makeCheckDate(deps);
     }
-
-    const ok = isLiteral(ctx.checker, typ);
-    if (ok) {
-        const arg = ts.createIdentifier(ctx.checker.typeToString(typ));
-        return [ 
-            ts.createCall(
-                ts.createIdentifier('runtime.checkLiteralOf'), [], [ arg ],
-            ), 
-            deps, 
-        ];
+    if (isLiteral(ctx.checker, typ)) {
+        return makeCheckLiteral(ctx, typ, deps);
     }
-    const eltyps = isTuple(typ, node);
-    if (eltyps) {
-        const arg = ts.createArrayLiteral(eltyps.map(typ => {
-            const [ t, d2 ] = makeCheck(ctx, typ);
-            deps = [ ...deps, ...d2 ];
-            return t;
-        }), true);
-        return [
-            ts.createCall(
-                ts.createIdentifier('runtime.checkTupleOf'), [], [ arg ]
-            ),
-            deps,
-        ];
+    if (isTuple(typ, node)) {
+        return makeCheckTupleOf(ctx, node, typ, deps);
     }
-
-    const eltyp = isArray(typ, node);
-    if (eltyp) {
-        const [ arg, d2 ] = makeCheck(ctx, eltyp);
-        return [
-            ts.createCall(
-                ts.createIdentifier('runtime.checkArrayOf'), [], [ arg ],
-            ),
-            [ ...deps, ...d2 ],
-        ];
+    if (isArray(typ, node)) {
+        return makeCheckArrayOf(ctx, node, typ, deps);
     } 
-
     if (isObject(typ)) {
-        const oldPm = ctx.activePropertyMapper;
-        const pm = ctx.propertyMappers.get(typ);
-        if (pm) {
-            ctx.activePropertyMapper = pm;
-        }
-
-        const assignments: ts.ObjectLiteralElementLike[] = [];
-        const props = typ.getProperties();
-        for (const k in props) {
-            if (props[k].valueDeclaration.kind !== ts.SyntaxKind.PropertySignature) {
-                continue;
-            }
-
-            const ps = props[k].valueDeclaration as ts.PropertySignature;
-            const subnode = ps.type;
-            if (!subnode) {
-                throw new Error("WTF");
-            }
-
-            const optional = !!(props[k].flags & ts.SymbolFlags.Optional);
-
-            const [ check, d2 ] = makeCheck(ctx, subnode, optional);
-            deps = [ ...deps, ...d2 ];
-
-            assignments.push(ts.createPropertyAssignment(props[k].name, check));
-        }
-
-        const arg = ts.createObjectLiteral(assignments, true);
-        const args = [ arg ];
-
-        if (ctx.activePropertyMapper) {
-            args.push(ts.createObjectLiteral([
-                ts.createPropertyAssignment('propertyMapper', ts.createIdentifier('runtime.' + ctx.activePropertyMapper)),
-            ], true));
-        }
-
-        ctx.activePropertyMapper = oldPm;
-
-        return [
-            ts.createCall(
-                ts.createIdentifier('runtime.checkShapeOf'), [], args,
-            ),
-            deps,
-        ];
+        return makeCheckShapeOf(ctx, typ, deps);
     }
-
     if (ts.isUnionTypeNode(node)) {
-        const args = node.types.map(t => {
-            const [ check, d2 ] = makeCheck(ctx, t);
-            deps = [ ...deps, ...d2 ];
-            return check;
-        });
-        const arg = ts.createArrayLiteral(args as ts.Expression[], true);
-
-        return [
-            ts.createCall(
-                ts.createIdentifier('runtime.checkOr'), [], [ arg ],
-            ),
-            deps,
-        ];
+        return makeCheckOr(ctx, node, typ, deps);
     }
-
     if (ts.isIntersectionTypeNode(node)) {
-        const args = node.types.map(t => {
-            const [ check, d2 ] = makeCheck(ctx, t);
-            deps = [ ...deps, ...d2 ];
-            return check;
-        });
-
-        const arg = ts.createArrayLiteral(args as ts.Expression[], true);
-        return [
-            ts.createCall(
-                ts.createIdentifier('runtime.checkAnd'), [], [ arg ],
-            ),
-            deps,
-        ];
+        return makeCheckAnd(ctx, node, typ, deps);
     }
 
     throw new Error("Invalid type at " + ctx.checker.typeToString(typ));
@@ -422,4 +295,167 @@ function makeAssert(arg: ts.Expression | string, check: ts.Expression): ts.CallE
 
 function ucfirst(str: string): string {
     return str[0].toUpperCase() + str.substr(1);
+}
+
+function makeCheckBoolean(deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    return [ ts.createIdentifier('runtime.checkBoolean'), deps ];
+}
+
+function makeCheckString(deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    return [ ts.createIdentifier('runtime.checkString'), deps ];
+}
+
+function makeCheckNumber(deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    return [ ts.createIdentifier('runtime.checkNumber'), deps ];
+}
+
+function makeCheckEmpty(deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    return [ ts.createIdentifier('runtime.checkEmpty'), deps ];
+}
+
+function makeCheckDate(deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    return [ ts.createIdentifier('runtime.checkDate'), deps ];
+}
+
+function makeCheckRecordOf(ctx: Context, node: ts.TypeNode, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    const eltyp = ((node as ts.NodeWithTypeArguments).typeArguments as ts.NodeArray<ts.TypeNode>)[1];
+
+    const [ arg, d2 ] = makeCheck(ctx, eltyp);
+    return [ 
+        ts.createCall(
+            ts.createIdentifier('runtime.checkRecordOf'), [], [ arg ],
+        ),
+        [ ...deps, ...d2 ],
+    ];
+}
+
+function makeCheckShapeOf(ctx: Context, typ: ts.Type, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    const oldPm = ctx.activePropertyMapper;
+    const pm = ctx.propertyMappers.get(typ);
+    if (pm) {
+        ctx.activePropertyMapper = pm;
+    }
+
+    const assignments: ts.ObjectLiteralElementLike[] = [];
+    const props = typ.getProperties();
+    for (const k in props) {
+        if (props[k].valueDeclaration.kind !== ts.SyntaxKind.PropertySignature) {
+            continue;
+        }
+
+        const ps = props[k].valueDeclaration as ts.PropertySignature;
+        const subnode = ps.type;
+        if (!subnode) {
+            throw new Error("WTF");
+        }
+
+        const optional = !!(props[k].flags & ts.SymbolFlags.Optional);
+
+        const [ check, d2 ] = makeCheck(ctx, subnode, optional);
+        deps = [ ...deps, ...d2 ];
+
+        assignments.push(ts.createPropertyAssignment(props[k].name, check));
+    }
+
+    const arg = ts.createObjectLiteral(assignments, true);
+    const args = [ arg ];
+
+    if (ctx.activePropertyMapper) {
+        args.push(ts.createObjectLiteral([
+            ts.createPropertyAssignment('propertyMapper', ts.createIdentifier('runtime.' + ctx.activePropertyMapper)),
+        ], true));
+    }
+
+    ctx.activePropertyMapper = oldPm;
+
+    return [
+        ts.createCall(
+            ts.createIdentifier('runtime.checkShapeOf'), [], args,
+        ),
+        deps,
+    ];
+}
+
+function makeCheckLiteral(ctx: Context, typ: ts.Type, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    const arg = ts.createIdentifier(ctx.checker.typeToString(typ));
+    return [ 
+        ts.createCall(
+            ts.createIdentifier('runtime.checkLiteralOf'), [], [ arg ],
+        ), 
+        deps, 
+    ];
+}
+
+function makeCheckTupleOf(ctx: Context, node: ts.TupleTypeNode, typ: ts.Type, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    const arg = ts.createArrayLiteral(node.elementTypes.map(typ => {
+        const [ t, d2 ] = makeCheck(ctx, typ);
+        deps = [ ...deps, ...d2 ];
+        return t;
+    }), true);
+    return [
+        ts.createCall(
+            ts.createIdentifier('runtime.checkTupleOf'), [], [ arg ]
+        ),
+        deps,
+    ];
+}
+
+function makeCheckArrayOf(ctx: Context, node: ts.ArrayTypeNode, typ: ts.Type, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    const [ arg, d2 ] = makeCheck(ctx, node.elementType);
+    return [
+        ts.createCall(
+            ts.createIdentifier('runtime.checkArrayOf'), [], [ arg ],
+        ),
+        [ ...deps, ...d2 ],
+    ];
+}
+
+function makeCheckDeferred(ctx: Context, existing: string, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    return [ 
+        ts.createCall(
+            ts.createIdentifier('runtime.checkDeferred'), [], [ 
+                ts.createArrowFunction(
+                    void 0,
+                    void 0,
+                    [],
+                    void 0,
+                    void 0,
+                    ts.createIdentifier(existing),
+                ),
+            ]
+        ),
+        deps,
+    ];
+}
+
+function makeCheckOr(ctx: Context, node: ts.UnionTypeNode, typ: ts.Type, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    const args = node.types.map(t => {
+        const [ check, d2 ] = makeCheck(ctx, t);
+        deps = [ ...deps, ...d2 ];
+        return check;
+    });
+    const arg = ts.createArrayLiteral(args as ts.Expression[], true);
+
+    return [
+        ts.createCall(
+            ts.createIdentifier('runtime.checkOr'), [], [ arg ],
+        ),
+        deps,
+    ];
+}
+
+function makeCheckAnd(ctx: Context, node: ts.IntersectionTypeNode, typ: ts.Type, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    const args = node.types.map(t => {
+        const [ check, d2 ] = makeCheck(ctx, t);
+        deps = [ ...deps, ...d2 ];
+        return check;
+    });
+
+    const arg = ts.createArrayLiteral(args as ts.Expression[], true);
+    return [
+        ts.createCall(
+            ts.createIdentifier('runtime.checkAnd'), [], [ arg ],
+        ),
+        deps,
+    ];
 }
