@@ -9,13 +9,13 @@ export function checkGenericT<T, U>(checkT: runtime.Check<T>, checkU: runtime.Ch
         valueU: checkU
     });
 }
-export function toGenericT<T, U>(checkT: runtime.Check<T>, checkU: runtime.Check<U>) {
+export function toGenericT<T, U>(checkT: runtime.Check<T>, checkU: runtime.Check<U>): (js: runtime.JSONValue) => GenericT<T, U> {
     const check = checkGenericT(checkT, checkU);
     return function (js: runtime.JSONValue): GenericT<T, U> {
         return runtime.assert(js, check);
     };
 }
-export function toGenericTArr<T, U>(checkT: runtime.Check<T>, checkU: runtime.Check<U>) {
+export function toGenericTArr<T, U>(checkT: runtime.Check<T>, checkU: runtime.Check<U>): (js: runtime.JSONValue) => Array<GenericT<T, U>> {
     const check = checkGenericT(checkT, checkU);
     return function (js: runtime.JSONValue): Array<GenericT<T, U>> {
         return runtime.assert(js, runtime.checkArrayOf(check));

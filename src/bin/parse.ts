@@ -124,7 +124,11 @@ function makeFn(n: ts.TypeAliasDeclaration): ts.Node {
             'to' + ucfirst(n.name.text),
             n.typeParameters,
             params,
-            void 0,
+            ts.createFunctionTypeNode(
+                void 0,
+                [ ts.createParameter(void 0, void 0, void 0, 'js', void 0, ts.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
+                ts.createTypeReferenceNode(n.name.text, nodes),
+            ),
             ts.createBlock([
                 ts.createVariableStatement(void 0, ts.createVariableDeclarationList([
                     ts.createVariableDeclaration('check', void 0, ts.createCall(ts.createIdentifier(`check${ n.name.text }`), [], args)),
@@ -182,7 +186,13 @@ function makeFnArr(n: ts.TypeAliasDeclaration): ts.Node {
             'to' + ucfirst(n.name.text) + 'Arr',
             n.typeParameters,
             params,
-            void 0,
+            ts.createFunctionTypeNode(
+                void 0,
+                [ ts.createParameter(void 0, void 0, void 0, 'js', void 0, ts.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
+                ts.createTypeReferenceNode('Array', [
+                    ts.createTypeReferenceNode(n.name.text, nodes),
+                ]),
+            ),
             ts.createBlock([
                 ts.createVariableStatement(void 0, ts.createVariableDeclarationList([
                     ts.createVariableDeclaration('check', void 0, ts.createCall(ts.createIdentifier(`check${ n.name.text }`), [], args)),
