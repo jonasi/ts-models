@@ -9,14 +9,14 @@ type UngeneratedT3 = {
 type GeneratedT3 = {
     str: string;
 };
-const checkGeneratedT2: runtime.Check<GeneratedT2> = runtime.checkShapeOf({
+export const checkGeneratedT2: runtime.Check<GeneratedT2> = runtime.checkShapeOf({
     dep: runtime.checkShapeOf({
         ok: runtime.checkString
     }),
     depArr: runtime.checkArrayOf(runtime.checkShapeOf({
         str: runtime.checkString
     }))
-})
+});
 export function toGeneratedT2(js: runtime.JSONValue): GeneratedT2 {
     return runtime.assert(js, checkGeneratedT2);
 }
@@ -26,9 +26,9 @@ export function toGeneratedT2Arr(js: runtime.JSONValue): Array<GeneratedT2> {
 type GeneratedT3 = {
     str: string;
 };
-const checkGeneratedT3: runtime.Check<GeneratedT3> = runtime.checkShapeOf({
+export const checkGeneratedT3: runtime.Check<GeneratedT3> = runtime.checkShapeOf({
     str: runtime.checkString
-})
+});
 export function toGeneratedT3(js: runtime.JSONValue): GeneratedT3 {
     return runtime.assert(js, checkGeneratedT3);
 }

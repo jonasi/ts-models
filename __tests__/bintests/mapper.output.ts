@@ -6,7 +6,7 @@ type MapperT = {
 type SubMapperT = {
     str: string;
 };
-const checkMapperT: runtime.Check<MapperT> = runtime.checkShapeOf({
+export const checkMapperT: runtime.Check<MapperT> = runtime.checkShapeOf({
     str: runtime.checkString,
     sub: runtime.checkShapeOf({
         str: runtime.checkString
@@ -15,7 +15,7 @@ const checkMapperT: runtime.Check<MapperT> = runtime.checkShapeOf({
     })
 }, {
     propertyMapper: runtime.toLower
-})
+});
 export function toMapperT(js: runtime.JSONValue): MapperT {
     return runtime.assert(js, checkMapperT);
 }

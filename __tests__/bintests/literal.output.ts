@@ -6,13 +6,13 @@ type LiteralT = {
     null: null;
     undef: undefined;
 };
-const checkLiteralT: runtime.Check<LiteralT> = runtime.checkShapeOf({
+export const checkLiteralT: runtime.Check<LiteralT> = runtime.checkShapeOf({
     str: runtime.checkLiteralOf("string"),
     num: runtime.checkLiteralOf(4),
     bool: runtime.checkLiteralOf(false),
     null: runtime.checkLiteralOf(null),
     undef: runtime.checkEmpty
-})
+});
 export function toLiteralT(js: runtime.JSONValue): LiteralT {
     return runtime.assert(js, checkLiteralT);
 }

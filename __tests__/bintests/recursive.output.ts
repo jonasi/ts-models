@@ -2,12 +2,12 @@ import * as runtime from "@jonasi/ts-models";
 type RecursiveT = {
     recurse?: RecursiveT;
 };
-const checkRecursiveT: runtime.Check<RecursiveT> = runtime.checkShapeOf({
+export const checkRecursiveT: runtime.Check<RecursiveT> = runtime.checkShapeOf({
     recurse: runtime.checkOr([
         runtime.checkEmpty,
         runtime.checkDeferred(() => checkRecursiveT)
     ])
-})
+});
 export function toRecursiveT(js: runtime.JSONValue): RecursiveT {
     return runtime.assert(js, checkRecursiveT);
 }

@@ -4,14 +4,14 @@ type IntersectionT = {
 } & {
     num: number;
 };
-const checkIntersectionT: runtime.Check<IntersectionT> = runtime.checkAnd([
+export const checkIntersectionT: runtime.Check<IntersectionT> = runtime.checkAnd([
     runtime.checkShapeOf({
         str: runtime.checkString
     }),
     runtime.checkShapeOf({
         num: runtime.checkNumber
     })
-])
+]);
 export function toIntersectionT(js: runtime.JSONValue): IntersectionT {
     return runtime.assert(js, checkIntersectionT);
 }

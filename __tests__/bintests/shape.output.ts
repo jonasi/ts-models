@@ -4,11 +4,11 @@ type ShapeT = {
         str: string;
     };
 };
-const checkShapeT: runtime.Check<ShapeT> = runtime.checkShapeOf({
+export const checkShapeT: runtime.Check<ShapeT> = runtime.checkShapeOf({
     subobj: runtime.checkShapeOf({
         str: runtime.checkString
     })
-})
+});
 export function toShapeT(js: runtime.JSONValue): ShapeT {
     return runtime.assert(js, checkShapeT);
 }

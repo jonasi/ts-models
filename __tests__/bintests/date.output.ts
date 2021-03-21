@@ -2,9 +2,9 @@ import * as runtime from "@jonasi/ts-models";
 type DateT = {
     d: Date;
 };
-const checkDateT: runtime.Check<DateT> = runtime.checkShapeOf({
+export const checkDateT: runtime.Check<DateT> = runtime.checkShapeOf({
     d: runtime.checkDate
-})
+});
 export function toDateT(js: runtime.JSONValue): DateT {
     return runtime.assert(js, checkDateT);
 }

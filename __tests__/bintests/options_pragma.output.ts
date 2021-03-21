@@ -5,13 +5,13 @@ type OptionsPragmaT = {
 type SubOptionsPragmaT = {
     str: string;
 };
-const checkOptionsPragmaT: runtime.Check<OptionsPragmaT> = runtime.checkShapeOf({
+export const checkOptionsPragmaT: runtime.Check<OptionsPragmaT> = runtime.checkShapeOf({
     sub: runtime.checkShapeOf({
         str: runtime.checkString
     }, {
         propertyMapper: runtime.toLower
     })
-})
+});
 export function toOptionsPragmaT(js: runtime.JSONValue): OptionsPragmaT {
     return runtime.assert(js, checkOptionsPragmaT);
 }

@@ -2,12 +2,12 @@ import * as runtime from "@jonasi/ts-models";
 type OptionalT = {
     str?: string;
 };
-const checkOptionalT: runtime.Check<OptionalT> = runtime.checkShapeOf({
+export const checkOptionalT: runtime.Check<OptionalT> = runtime.checkShapeOf({
     str: runtime.checkOr([
         runtime.checkEmpty,
         runtime.checkString
     ])
-})
+});
 export function toOptionalT(js: runtime.JSONValue): OptionalT {
     return runtime.assert(js, checkOptionalT);
 }

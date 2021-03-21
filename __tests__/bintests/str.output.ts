@@ -2,9 +2,9 @@ import * as runtime from "@jonasi/ts-models";
 type StringT = {
     str: string;
 };
-const checkStringT: runtime.Check<StringT> = runtime.checkShapeOf({
+export const checkStringT: runtime.Check<StringT> = runtime.checkShapeOf({
     str: runtime.checkString
-})
+});
 export function toStringT(js: runtime.JSONValue): StringT {
     return runtime.assert(js, checkStringT);
 }

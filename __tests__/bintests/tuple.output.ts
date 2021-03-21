@@ -2,13 +2,13 @@ import * as runtime from "@jonasi/ts-models";
 type TupleT = {
     tuple: [string, number, boolean];
 };
-const checkTupleT: runtime.Check<TupleT> = runtime.checkShapeOf({
+export const checkTupleT: runtime.Check<TupleT> = runtime.checkShapeOf({
     tuple: runtime.checkTupleOf([
         runtime.checkString,
         runtime.checkNumber,
         runtime.checkBoolean
     ])
-})
+});
 export function toTupleT(js: runtime.JSONValue): TupleT {
     return runtime.assert(js, checkTupleT);
 }

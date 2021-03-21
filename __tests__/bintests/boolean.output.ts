@@ -2,9 +2,9 @@ import * as runtime from "@jonasi/ts-models";
 type BooleanT = {
     b: boolean;
 };
-const checkBooleanT: runtime.Check<BooleanT> = runtime.checkShapeOf({
+export const checkBooleanT: runtime.Check<BooleanT> = runtime.checkShapeOf({
     b: runtime.checkBoolean
-})
+});
 export function toBooleanT(js: runtime.JSONValue): BooleanT {
     return runtime.assert(js, checkBooleanT);
 }

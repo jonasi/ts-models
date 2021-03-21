@@ -15,7 +15,7 @@ export function generateModels(file: string): string {
 type Context = {
     checker: ts.TypeChecker,
     globals: Globals,
-    allChecks: Map<ts.Type, string>;
+    allChecks: Map<ts.Type, [ ts.Expression, ts.TypeAliasDeclaration[] ]>;
     propertyMappers: Map<ts.Type, string>;
     activePropertyMapper: string | undefined;
 };
@@ -95,6 +95,47 @@ function makeType(n: ts.TypeAliasDeclaration): ts.Node {
 }
 
 function makeFn(n: ts.TypeAliasDeclaration): ts.Node {
+    if (n.typeParameters && n.typeParameters.length) {
+        const params: ts.ParameterDeclaration[] = [];
+        const args: ts.Expression[] = [];
+        const nodes: ts.TypeNode[] = [];
+        n.typeParameters.forEach(typArg => {
+            nodes.push(
+                ts.createTypeReferenceNode(typArg.name.text)
+            );
+            params.push(
+                ts.createParameter(void 0, void 0, void 0, `check${ typArg.name.text }`, void 0, ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(typArg.name.text, void 0) ])),
+            );
+            args.push(ts.createIdentifier(`check${ typArg.name.text }`));
+        });
+
+        return ts.createFunctionDeclaration(
+            void 0,
+            [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
+            void 0,
+            'to' + ucfirst(n.name.text),
+            n.typeParameters,
+            params,
+            void 0,
+            ts.createBlock([
+                ts.createVariableStatement(void 0, ts.createVariableDeclarationList([
+                    ts.createVariableDeclaration('check', void 0, ts.createCall(ts.createIdentifier(`check${ n.name.text }`), [], args)),
+                ], ts.NodeFlags.Const)),
+                ts.createReturn(ts.createFunctionExpression(
+                    void 0,
+                    void 0,
+                    void 0,
+                    void 0,
+                    [ ts.createParameter(void 0, void 0, void 0, 'js', void 0, ts.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
+                    ts.createTypeReferenceNode(n.name.text, nodes),
+                    ts.createBlock([
+                        ts.createReturn(makeAssert('js', ts.createIdentifier('check'))),
+                    ], true),
+                )),
+            ], true),
+        );
+    }
+
     const fn = ts.createFunctionDeclaration(
         void 0,
         [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
@@ -112,6 +153,53 @@ function makeFn(n: ts.TypeAliasDeclaration): ts.Node {
 }
 
 function makeFnArr(n: ts.TypeAliasDeclaration): ts.Node {
+    if (n.typeParameters && n.typeParameters.length) {
+        const params: ts.ParameterDeclaration[] = [];
+        const args: ts.Expression[] = [];
+        const nodes: ts.TypeNode[] = [];
+        n.typeParameters.forEach(typArg => {
+            nodes.push(
+                ts.createTypeReferenceNode(typArg.name.text)
+            );
+            params.push(
+                ts.createParameter(void 0, void 0, void 0, `check${ typArg.name.text }`, void 0, ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(typArg.name.text, void 0) ])),
+            );
+            args.push(ts.createIdentifier(`check${ typArg.name.text }`));
+        });
+
+        return ts.createFunctionDeclaration(
+            void 0,
+            [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
+            void 0,
+            'to' + ucfirst(n.name.text) + 'Arr',
+            n.typeParameters,
+            params,
+            void 0,
+            ts.createBlock([
+                ts.createVariableStatement(void 0, ts.createVariableDeclarationList([
+                    ts.createVariableDeclaration('check', void 0, ts.createCall(ts.createIdentifier(`check${ n.name.text }`), [], args)),
+                ], ts.NodeFlags.Const)),
+                ts.createReturn(ts.createFunctionExpression(
+                    void 0,
+                    void 0,
+                    void 0,
+                    void 0,
+                    [ ts.createParameter(void 0, void 0, void 0, 'js', void 0, ts.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
+                    ts.createTypeReferenceNode('Array', [
+                        ts.createTypeReferenceNode(n.name.text, nodes),
+                    ]),
+                    ts.createBlock([
+                        ts.createReturn(makeAssert('js', ts.createCall(
+                            ts.createIdentifier('runtime.checkArrayOf'),
+                            void 0,
+                            [ ts.createIdentifier('check') ]
+                        ))),
+                    ], true),
+                )),
+            ], true),
+        );
+    }
+
     const fn = ts.createFunctionDeclaration(
         void 0,
         [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
@@ -202,19 +290,60 @@ function isTypeReference(t: ts.Type): t is ts.TypeReference {
     return isObject(t) && !!(t.objectFlags & ts.ObjectFlags.Reference);
 }
 
-function makeCheckFn(ctx: Context, name: string, node: ts.TypeNode): [ ts.VariableDeclarationList, ts.TypeAliasDeclaration[] ] {
+function makeCheckFn(ctx: Context, name: string, node: ts.TypeNode): [ ts.Node, ts.TypeAliasDeclaration[] ] {
     const checkName = 'check' + ucfirst(name);
-    ctx.allChecks.set(ctx.checker.getTypeFromTypeNode(node), checkName);
+    const typ = ctx.checker.getTypeFromTypeNode(node);
+    ctx.allChecks.set(typ, makeCheckDeferred(ctx, checkName, []));
+
+    if (typ.aliasTypeArguments && typ.aliasTypeArguments.length) {
+        const params: ts.ParameterDeclaration[] = [];
+        const typArgs: ts.TypeParameterDeclaration[] = [];
+        const typNodes: ts.TypeNode[] = [];
+
+        typ.aliasTypeArguments.forEach(typArg => {
+            typNodes.push(
+                ts.createTypeReferenceNode(typArg.symbol.name)
+            );
+            typArgs.push(
+                ts.createTypeParameterDeclaration(typArg.symbol.name),
+            );
+            params.push(
+                ts.createParameter(void 0, void 0, void 0, `check${ typArg.symbol.name}`, void 0, ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(typArg.symbol.name, void 0) ])),
+            );
+
+            ctx.allChecks.set(typArg, [ ts.createIdentifier(`check${ typArg.symbol.name}`), [] ]);
+        });
+
+        const [ check, deps ] = makeCheck(ctx, node, false, true);
+        return [
+            ts.createFunctionDeclaration(
+                void 0,
+                [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
+                void 0,
+                checkName,
+                typArgs,
+                params,
+                ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(name, typNodes) ]),
+                ts.createBlock([
+                    ts.createReturn(check),
+                ], true),
+            ),
+            deps,
+        ];
+    }
 
     const [ check, deps ] = makeCheck(ctx, node, false, true);
     return [
-        ts.createVariableDeclarationList([
-            ts.createVariableDeclaration(
-                checkName,
-                ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(name, void 0) ]),
-                check,
-            ),
-        ], ts.NodeFlags.Const),
+        ts.createVariableStatement(
+            [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
+            ts.createVariableDeclarationList([
+                ts.createVariableDeclaration(
+                    checkName,
+                    ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(name, void 0) ]),
+                    check,
+                ),
+            ], ts.NodeFlags.Const),
+        ),
         deps,
     ];
 }
@@ -240,7 +369,7 @@ function makeCheck(ctx: Context, node: ts.TypeNode, optional = false, skipExisti
     if (!skipExisting) {
         const existing = ctx.allChecks.get(typ);
         if (existing) {
-            return makeCheckDeferred(ctx, existing, deps);
+            return existing;
         }
     }
 
