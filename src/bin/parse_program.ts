@@ -5,8 +5,8 @@ import * as shellquote from 'shell-quote';
 const commentPrefix = '@jonasi/ts-models ';
 
 export type ParsedNode = 
-    | { type: 'generate_type', node: ts.TypeAliasDeclaration }
-    | { type: 'type_options', node: ts.TypeAliasDeclaration, propertyMapper: string | undefined };
+    | { type: 'generate_type', node: ts.TypeAliasDeclaration, file: ts.SourceFile }
+    | { type: 'type_options', node: ts.TypeAliasDeclaration, propertyMapper: string | undefined, file: ts.SourceFile };
 
 const optionsArgs = {
     '--property-mapper': String,
@@ -15,19 +15,19 @@ const optionsArgs = {
 export default function parseProgram(pr: ts.Program): ParsedNode[] {
     const nodes: ParsedNode[] = [];
 
-    for (const f of pr.getSourceFiles()) {
-        if (!f.isDeclarationFile) {
-            const sl = f.getChildren(f).find(n => n.kind === ts.SyntaxKind.SyntaxList);
+    for (const file of pr.getSourceFiles()) {
+        if (!file.isDeclarationFile) {
+            const sl = file.getChildren(file).find(n => n.kind === ts.SyntaxKind.SyntaxList);
             if (!sl) {
                 continue;
             }
 
-            sl.getChildren(f).forEach(node => {
+            sl.getChildren(file).forEach(node => {
                 if (!ts.isTypeAliasDeclaration(node)) {
                     return;
                 }
 
-                const c = comments(f, node);
+                const c = comments(file, node);
                 if (!c) {
                     return;
                 }
@@ -44,10 +44,12 @@ export default function parseProgram(pr: ts.Program): ParsedNode[] {
                         const opts = arg(optionsArgs, { argv });
                         nodes.push({ 
                             type: 'generate_type', 
+                            file,
                             node,
                         });
                         nodes.push({
                             type:           'type_options', 
+                            file,
                             node,
                             propertyMapper: opts['--property-mapper'],
                         });
@@ -57,6 +59,7 @@ export default function parseProgram(pr: ts.Program): ParsedNode[] {
                         const opts = arg(optionsArgs, { argv });
                         nodes.push({
                             type:           'type_options', 
+                            file,
                             node,
                             propertyMapper: opts['--property-mapper'],
                         });

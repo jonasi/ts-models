@@ -6,10 +6,19 @@ import { fileToString } from './print';
 
 export function generateModels(file: string): string {
     const prog = createProgram(file);
-    const f = prog.getSourceFile(file) as ts.SourceFile;
     const nodes = createModels(prog);
 
-    return fileToString(f, nodes);
+    const header = nodes.length ? makeHeader() : [];
+    const nodeMap = nodes.reduce((map, n) => {
+        const nodes = map.get(n.file) || [];
+        nodes.push(n.node);
+        map.set(n.file, nodes);
+
+        return map;
+    }, new Map<ts.SourceFile, ts.Node[]>());
+
+
+    return fileToString(prog.getSourceFile(file) as ts.SourceFile, header) + Array.from(nodeMap).map(n => fileToString(n[0], n[1])).join('\n');
 }
 
 type Context = {
@@ -20,7 +29,7 @@ type Context = {
     activePropertyMapper: string | undefined;
 };
 
-function createModels(prog: ts.Program): ts.Node[] {
+function createModels(prog: ts.Program): { file: ts.SourceFile, node: ts.Node }[] {
     const ctx: Context = {
         globals:              getGlobals(prog),
         checker:              prog.getTypeChecker(),
@@ -30,15 +39,14 @@ function createModels(prog: ts.Program): ts.Node[] {
     };
 
     const types = parseProgram(prog);
-    const header = types.length ? makeHeader() : [];
-    let definitions: ts.Node[] = [ ...header ];
+    let definitions: { file: ts.SourceFile, node: ts.Node }[] = [];
     const actions: (() => void)[] = [];
 
     types.forEach(t => {
         switch (t.type) {
             case 'generate_type':
                 actions.push(() => {
-                    const defs = makeDef(ctx, t.node);
+                    const defs = makeDef(ctx, t.node).map(node => ({ file: t.file, node }));
                     definitions = [ ...definitions, ...defs ];
                 });
                 break;
