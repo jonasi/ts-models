@@ -1,6 +1,9 @@
-import { assert, checkShapeOf, checkString, checkNumber, JSONValue, Check, checkDate, checkArray, checkArrayOf, CheckError, checkTupleOf, toLowerSnake } from '../src/index';
+import { assert, checkShapeOf, checkString, checkNumber, JSONValue, Check, checkDate, checkArray, checkArrayOf, CheckError, checkTupleOf, toLowerSnake, checkUnknown } from '../src/index';
 
 const valueTests: { type: string, it: string, input: JSONValue | undefined, check: Check<unknown>, output?: unknown, error?: string }[] = [
+    { type: 'unknown', it: 'should pass through (str)', check: checkUnknown, input: 'str', output: 'str' },
+    { type: 'unknown', it: 'should pass through (null)', check: checkUnknown, input: null, output: null },
+    { type: 'unknown', it: 'should pass through (undefined)', check: checkUnknown, input: void 0, output: void 0 },
     { type: 'string', it: 'should pass through', check: checkString, input: 'str', output: 'str' },
     { type: 'string', it: 'should default to empty string (undefined)', check: checkString, input: void 0, output: '' },
     { type: 'string', it: 'should default to empty string (null)', check: checkString, input: null, output: '' },

@@ -136,6 +136,10 @@ function makeFnArr(n: ts.TypeAliasDeclaration): ts.Node {
     return fn;
 }
 
+function isUnknown(t: ts.Type): boolean {
+    return !!(t.flags & ts.TypeFlags.Unknown);
+}
+
 function isBoolean(t: ts.Type): boolean {
     return !!(t.flags & ts.TypeFlags.Boolean);
 }
@@ -248,6 +252,9 @@ function makeCheck(ctx: Context, node: ts.TypeNode, optional = false, skipExisti
         deps = [ typ.aliasSymbol.declarations[0] as ts.TypeAliasDeclaration ];
     }
 
+    if (isUnknown(typ)) {
+        return makeCheckUnknown(deps);
+    }
     if (isBoolean(typ)) {
         return makeCheckBoolean(deps);
     }
@@ -295,6 +302,10 @@ function makeAssert(arg: ts.Expression | string, check: ts.Expression): ts.CallE
 
 function ucfirst(str: string): string {
     return str[0].toUpperCase() + str.substr(1);
+}
+
+function makeCheckUnknown(deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    return [ ts.createIdentifier('runtime.checkUnknown'), deps ];
 }
 
 function makeCheckBoolean(deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
@@ -387,7 +398,7 @@ function makeCheckLiteral(ctx: Context, typ: ts.Type, deps: ts.TypeAliasDeclarat
 }
 
 function makeCheckTupleOf(ctx: Context, node: ts.TupleTypeNode, typ: ts.Type, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
-    const arg = ts.createArrayLiteral(node.elementTypes.map(typ => {
+    const arg = ts.createArrayLiteral(node.elements.map(typ => {
         const [ t, d2 ] = makeCheck(ctx, typ);
         deps = [ ...deps, ...d2 ];
         return t;

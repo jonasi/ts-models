@@ -45,6 +45,8 @@ export const checkEmpty = makeCheck('empty', (js, path) => {
     throw new CheckError('Expected null or undefined and found ' + (typeof js), path);
 });
 
+export const checkUnknown = makeCheck('unknown', js => js);
+
 export const checkString = makeCheck('string', (js, path) => {
     if (typeof js === 'string') {
         return js;
@@ -138,18 +140,18 @@ export function checkArrayOf<T>(check: Check<T>): Check<T[]> {
     )));
 }
 
-type ShapeCheck<T extends Record<string, unknown>> = { [P in keyof T]: Check<T[P]> };
+type ShapeCheck<T> = { [P in keyof T]: Check<T[P]> };
 
 type ShapeOfOptions = {
     propertyMapper: PropertyMapper;
 };
 
-export function checkShapeOf<T extends Record<string, unknown>>(checks: ShapeCheck<T>, options?: ShapeOfOptions): Check<T> {
+export function checkShapeOf<T>(checks: ShapeCheck<T>, options?: ShapeOfOptions): Check<T> {
     return makeCheck('shapeOf', (js, path) => {
         const obj = checkObject(js, path);
         const ret: Partial<T> = {};
         for (const k in obj) {
-            const prop = options?.propertyMapper(k) || k as keyof T;
+            const prop = (options?.propertyMapper(k) || k) as keyof T;
             if (!checks[prop]) {
                 continue;
             }
