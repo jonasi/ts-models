@@ -37,10 +37,12 @@ valueTests.forEach(t => {
     describe(t.type, () => {
         it(t.it, () => {
             if (typeof t.error === 'string') {
-                let err: Error | undefined;
+                let err: unknown;
                 try {
                     assert(t.input, t.check);
-                } catch(e) { err = e; }
+                } catch (e) { 
+                    err = e;
+                }
 
                 expect(err).toBeInstanceOf(CheckError);
                 expect((err as CheckError).path).toBe(t.error);

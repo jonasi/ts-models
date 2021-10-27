@@ -395,7 +395,7 @@ function makeCheck(ctx: Context, node: ts.TypeNode, optional = false, skipExisti
         return makeCheckRecordOf(ctx, node, deps);
     }
 
-    if (typ.aliasSymbol) {
+    if (typ.aliasSymbol?.declarations?.length) {
         deps = [ typ.aliasSymbol.declarations[0] as ts.TypeAliasDeclaration ];
     }
 
@@ -497,7 +497,7 @@ function makeCheckShapeOf(ctx: Context, typ: ts.Type, deps: ts.TypeAliasDeclarat
     const assignments: ts.ObjectLiteralElementLike[] = [];
     const props = typ.getProperties();
     for (const k in props) {
-        if (props[k].valueDeclaration.kind !== ts.SyntaxKind.PropertySignature) {
+        if (props[k].valueDeclaration?.kind !== ts.SyntaxKind.PropertySignature) {
             continue;
         }
 
