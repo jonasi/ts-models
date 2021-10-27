@@ -1,26 +1,26 @@
 {
-  "name": "@jonasi/ts-models",
-  "version": "0.0.21",
-  "main": "dist/index.js",
-  "bin": {
-    "ts-models-generate": "./dist/bin/index.js"
-  },
-  "license": "MIT",
-  "devDependencies": {
-    "@types/jest": "^26.0.21",
-    "@types/node": "14.14.35",
-    "@types/shell-quote": "^1.7.0",
-    "@typescript-eslint/eslint-plugin": "^4.18.0",
-    "@typescript-eslint/parser": "^4.18.0",
-    "jest": "^26.6.3",
-    "ts-jest": "^26.5.4",
-    "ts-node": "^9.1.1"
-  },
-  "dependencies": {
-    "@jonasi/jslog": "^0.0.2",
-    "arg": "^5.0.0",
-    "eslint": "7.22.0",
-    "shell-quote": "^1.7.2",
-    "typescript": "4.2.3"
-  }
+    "name": "@jonasi/ts-models",
+    "version": "0.0.21",
+    "main": "dist/index.js",
+    "bin": {
+        "ts-models-generate": "./dist/bin/index.js"
+    },
+    "license": "MIT",
+    "devDependencies": {
+        "@types/jest": "^27.0.2",
+        "@types/node": "16.11.6",
+        "@types/shell-quote": "^1.7.1",
+        "@typescript-eslint/eslint-plugin": "^5.2.0",
+        "@typescript-eslint/parser": "^5.2.0",
+        "jest": "^27.3.1",
+        "ts-jest": "^27.0.7",
+        "ts-node": "^10.4.0"
+    },
+    "dependencies": {
+        "@jonasi/jslog": "^0.0.2",
+        "arg": "^5.0.1",
+        "eslint": "8.1.0",
+        "shell-quote": "^1.7.3",
+        "typescript": "4.4.4"
+    }
 }
