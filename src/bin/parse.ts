@@ -367,6 +367,10 @@ function makeCheckFn(ctx: Context, name: string, node: ts.TypeNode): [ ts.Node, 
 }
 
 function makeCheck(ctx: Context, node: ts.TypeNode, optional = false, skipExisting = false): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+    while (ts.isParenthesizedTypeNode(node)) {
+        node = node.type;
+    }
+
     if (optional) {
         const [ check, deps ] = makeCheck(ctx, node, false);
         const arg = ts.createArrayLiteral([
