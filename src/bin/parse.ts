@@ -259,7 +259,7 @@ function isNumber(t: ts.Type): boolean {
 }
 
 function isUndefined(t: ts.Type): boolean {
-    return !!(t.flags & ts.TypeFlags.Undefined);
+    return !!(t.flags & ts.TypeFlags.Undefined) || !!(t.flags & ts.TypeFlags.Void);
 }
 
 function isArray(t: ts.Type, node: ts.Node): node is ts.ArrayTypeNode {
