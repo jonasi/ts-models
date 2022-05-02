@@ -1,7 +1,9 @@
 import * as ts from 'typescript';
 import parseProgram from './parse_program';
-import createProgram, { getGlobals, Globals } from './create_program';
+import createProgram, { getGlobals } from './create_program';
 import { fileToString } from './print';
+import { Context, AcceptableDefT } from './context';
+import { isArray, isBoolean, isDate, isEnum, isLiteral, isNumber, isObject, isRecord, isString, isTuple, isUndefined, isUnknown } from './predicates';
 // import log from '@jonasi/jslog';
 
 export function generateModels(file: string): string {
@@ -20,14 +22,6 @@ export function generateModels(file: string): string {
 
     return fileToString(prog.getSourceFile(file) as ts.SourceFile, header) + Array.from(nodeMap).map(n => fileToString(n[0], n[1])).join('\n');
 }
-
-type Context = {
-    checker: ts.TypeChecker,
-    globals: Globals,
-    allChecks: Map<ts.Type, [ ts.Expression, ts.TypeAliasDeclaration[] ]>;
-    propertyMappers: Map<ts.Type, string>;
-    activePropertyMapper: string | undefined;
-};
 
 function createModels(prog: ts.Program): { file: ts.SourceFile, node: ts.Node }[] {
     const ctx: Context = {
@@ -52,7 +46,7 @@ function createModels(prog: ts.Program): { file: ts.SourceFile, node: ts.Node }[
                 break;
             case 'type_options':
                 if (t.propertyMapper) {
-                    const typ = ctx.checker.getTypeFromTypeNode(t.node.type);
+                    const typ = ctx.checker.getTypeAtLocation(t.node);
                     ctx.propertyMappers.set(typ, t.propertyMapper);
                 }
                 break;
@@ -66,20 +60,21 @@ function createModels(prog: ts.Program): { file: ts.SourceFile, node: ts.Node }[
 
 function makeHeader(): ts.Node[] {
     return [
-        ts.createImportDeclaration(
+        ts.factory.createImportDeclaration(
             void 0,
             void 0,
-            ts.createImportClause(
-                ts.createIdentifier('* as runtime'),
+            ts.factory.createImportClause(
+                false,
+                ts.factory.createIdentifier('* as runtime'),
                 void 0,
             ),
-            ts.createLiteral('@jonasi/ts-models'),
+            ts.factory.createStringLiteral('@jonasi/ts-models'),
         ),
     ];
 }
 
-function makeDef(ctx: Context, n: ts.TypeAliasDeclaration): ts.Node[] {
-    const [ checkFn, deps ] = makeCheckFn(ctx, n.name.text, n.type);
+function makeDef(ctx: Context, n: AcceptableDefT): ts.Node[] {
+    const [ checkFn, deps ] = makeCheckFn(ctx, n.name.text, ts.isTypeAliasDeclaration(n) ? n.type : n);
     const allTypes = [ n, ...deps ].filter((t, i, arr) => arr.indexOf(t) === i);
 
     return [
@@ -90,8 +85,17 @@ function makeDef(ctx: Context, n: ts.TypeAliasDeclaration): ts.Node[] {
     ];
 }
  
-function makeType(n: ts.TypeAliasDeclaration): ts.Node {
-    const al = ts.createTypeAliasDeclaration(
+function makeType(n: AcceptableDefT): ts.Node {
+    if (ts.isEnumDeclaration(n)) {
+        return ts.factory.createEnumDeclaration(
+            void 0,
+            void 0,
+            n.name,
+            n.members,
+        );
+    }
+
+    const al = ts.factory.createTypeAliasDeclaration(
         void 0,
         void 0,
         n.name,
@@ -102,115 +106,115 @@ function makeType(n: ts.TypeAliasDeclaration): ts.Node {
     return al;
 }
 
-function makeFn(n: ts.TypeAliasDeclaration): ts.Node {
-    if (n.typeParameters && n.typeParameters.length) {
+function makeFn(n: AcceptableDefT): ts.Node {
+    if (ts.isTypeAliasDeclaration(n) && n.typeParameters && n.typeParameters.length) {
         const params: ts.ParameterDeclaration[] = [];
         const args: ts.Expression[] = [];
         const nodes: ts.TypeNode[] = [];
         n.typeParameters.forEach(typArg => {
             nodes.push(
-                ts.createTypeReferenceNode(typArg.name.text)
+                ts.factory.createTypeReferenceNode(typArg.name.text)
             );
             params.push(
-                ts.createParameter(void 0, void 0, void 0, `check${ typArg.name.text }`, void 0, ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(typArg.name.text, void 0) ])),
+                ts.factory.createParameterDeclaration(void 0, void 0, void 0, `check${ typArg.name.text }`, void 0, ts.factory.createTypeReferenceNode('runtime.Check', [ ts.factory.createTypeReferenceNode(typArg.name.text, void 0) ])),
             );
-            args.push(ts.createIdentifier(`check${ typArg.name.text }`));
+            args.push(ts.factory.createIdentifier(`check${ typArg.name.text }`));
         });
 
-        return ts.createFunctionDeclaration(
+        return ts.factory.createFunctionDeclaration(
             void 0,
-            [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
+            [ ts.factory.createToken(ts.SyntaxKind.ExportKeyword) ],
             void 0,
             'to' + ucfirst(n.name.text),
             n.typeParameters,
             params,
-            ts.createFunctionTypeNode(
+            ts.factory.createFunctionTypeNode(
                 void 0,
-                [ ts.createParameter(void 0, void 0, void 0, 'js', void 0, ts.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
-                ts.createTypeReferenceNode(n.name.text, nodes),
+                [ ts.factory.createParameterDeclaration(void 0, void 0, void 0, 'js', void 0, ts.factory.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
+                ts.factory.createTypeReferenceNode(n.name.text, nodes),
             ),
-            ts.createBlock([
-                ts.createVariableStatement(void 0, ts.createVariableDeclarationList([
-                    ts.createVariableDeclaration('check', void 0, ts.createCall(ts.createIdentifier(`check${ n.name.text }`), [], args)),
+            ts.factory.createBlock([
+                ts.factory.createVariableStatement(void 0, ts.factory.createVariableDeclarationList([
+                    ts.factory.createVariableDeclaration('check', void 0, void 0, ts.factory.createCallExpression(ts.factory.createIdentifier(`check${ n.name.text }`), [], args)),
                 ], ts.NodeFlags.Const)),
-                ts.createReturn(ts.createFunctionExpression(
+                ts.factory.createReturnStatement(ts.factory.createFunctionExpression(
                     void 0,
                     void 0,
                     void 0,
                     void 0,
-                    [ ts.createParameter(void 0, void 0, void 0, 'js', void 0, ts.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
-                    ts.createTypeReferenceNode(n.name.text, nodes),
-                    ts.createBlock([
-                        ts.createReturn(makeAssert('js', ts.createIdentifier('check'))),
+                    [ ts.factory.createParameterDeclaration(void 0, void 0, void 0, 'js', void 0, ts.factory.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
+                    ts.factory.createTypeReferenceNode(n.name.text, nodes),
+                    ts.factory.createBlock([
+                        ts.factory.createReturnStatement(makeAssert('js', ts.factory.createIdentifier('check'))),
                     ], true),
                 )),
             ], true),
         );
     }
 
-    const fn = ts.createFunctionDeclaration(
+    const fn = ts.factory.createFunctionDeclaration(
         void 0,
-        [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
+        [ ts.factory.createToken(ts.SyntaxKind.ExportKeyword) ],
         void 0,
         'to' + ucfirst(n.name.text),
         void 0,
-        [ ts.createParameter(void 0, void 0, void 0, 'js', void 0, ts.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
-        ts.createTypeReferenceNode(n.name.text, void 0),
-        ts.createBlock([
-            ts.createReturn(makeAssert('js', ts.createIdentifier('check' + ucfirst(n.name.text)))),
+        [ ts.factory.createParameterDeclaration(void 0, void 0, void 0, 'js', void 0, ts.factory.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
+        ts.factory.createTypeReferenceNode(n.name.text, void 0),
+        ts.factory.createBlock([
+            ts.factory.createReturnStatement(makeAssert('js', ts.factory.createIdentifier('check' + ucfirst(n.name.text)))),
         ], true),
     );
 
     return fn;
 }
 
-function makeFnArr(n: ts.TypeAliasDeclaration): ts.Node {
-    if (n.typeParameters && n.typeParameters.length) {
+function makeFnArr(n: AcceptableDefT): ts.Node {
+    if (ts.isTypeAliasDeclaration(n) && n.typeParameters && n.typeParameters.length) {
         const params: ts.ParameterDeclaration[] = [];
         const args: ts.Expression[] = [];
         const nodes: ts.TypeNode[] = [];
         n.typeParameters.forEach(typArg => {
             nodes.push(
-                ts.createTypeReferenceNode(typArg.name.text)
+                ts.factory.createTypeReferenceNode(typArg.name.text)
             );
             params.push(
-                ts.createParameter(void 0, void 0, void 0, `check${ typArg.name.text }`, void 0, ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(typArg.name.text, void 0) ])),
+                ts.factory.createParameterDeclaration(void 0, void 0, void 0, `check${ typArg.name.text }`, void 0, ts.factory.createTypeReferenceNode('runtime.Check', [ ts.factory.createTypeReferenceNode(typArg.name.text, void 0) ])),
             );
-            args.push(ts.createIdentifier(`check${ typArg.name.text }`));
+            args.push(ts.factory.createIdentifier(`check${ typArg.name.text }`));
         });
 
-        return ts.createFunctionDeclaration(
+        return ts.factory.createFunctionDeclaration(
             void 0,
-            [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
+            [ ts.factory.createToken(ts.SyntaxKind.ExportKeyword) ],
             void 0,
             'to' + ucfirst(n.name.text) + 'Arr',
             n.typeParameters,
             params,
-            ts.createFunctionTypeNode(
+            ts.factory.createFunctionTypeNode(
                 void 0,
-                [ ts.createParameter(void 0, void 0, void 0, 'js', void 0, ts.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
-                ts.createTypeReferenceNode('Array', [
-                    ts.createTypeReferenceNode(n.name.text, nodes),
+                [ ts.factory.createParameterDeclaration(void 0, void 0, void 0, 'js', void 0, ts.factory.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
+                ts.factory.createTypeReferenceNode('Array', [
+                    ts.factory.createTypeReferenceNode(n.name.text, nodes),
                 ]),
             ),
-            ts.createBlock([
-                ts.createVariableStatement(void 0, ts.createVariableDeclarationList([
-                    ts.createVariableDeclaration('check', void 0, ts.createCall(ts.createIdentifier(`check${ n.name.text }`), [], args)),
+            ts.factory.createBlock([
+                ts.factory.createVariableStatement(void 0, ts.factory.createVariableDeclarationList([
+                    ts.factory.createVariableDeclaration('check', void 0, void 0, ts.factory.createCallExpression(ts.factory.createIdentifier(`check${ n.name.text }`), [], args)),
                 ], ts.NodeFlags.Const)),
-                ts.createReturn(ts.createFunctionExpression(
+                ts.factory.createReturnStatement(ts.factory.createFunctionExpression(
                     void 0,
                     void 0,
                     void 0,
                     void 0,
-                    [ ts.createParameter(void 0, void 0, void 0, 'js', void 0, ts.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
-                    ts.createTypeReferenceNode('Array', [
-                        ts.createTypeReferenceNode(n.name.text, nodes),
+                    [ ts.factory.createParameterDeclaration(void 0, void 0, void 0, 'js', void 0, ts.factory.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
+                    ts.factory.createTypeReferenceNode('Array', [
+                        ts.factory.createTypeReferenceNode(n.name.text, nodes),
                     ]),
-                    ts.createBlock([
-                        ts.createReturn(makeAssert('js', ts.createCall(
-                            ts.createIdentifier('runtime.checkArrayOf'),
+                    ts.factory.createBlock([
+                        ts.factory.createReturnStatement(makeAssert('js', ts.factory.createCallExpression(
+                            ts.factory.createIdentifier('runtime.checkArrayOf'),
                             void 0,
-                            [ ts.createIdentifier('check') ]
+                            [ ts.factory.createIdentifier('check') ]
                         ))),
                     ], true),
                 )),
@@ -218,22 +222,22 @@ function makeFnArr(n: ts.TypeAliasDeclaration): ts.Node {
         );
     }
 
-    const fn = ts.createFunctionDeclaration(
+    const fn = ts.factory.createFunctionDeclaration(
         void 0,
-        [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
+        [ ts.factory.createToken(ts.SyntaxKind.ExportKeyword) ],
         void 0,
         'to' + ucfirst(n.name.text) + 'Arr',
         void 0,
-        [ ts.createParameter(void 0, void 0, void 0, 'js', void 0, ts.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
-        ts.createTypeReferenceNode('Array', [
-            ts.createTypeReferenceNode(n.name.text, void 0),
+        [ ts.factory.createParameterDeclaration(void 0, void 0, void 0, 'js', void 0, ts.factory.createTypeReferenceNode('runtime.JSONValue', void 0)) ],
+        ts.factory.createTypeReferenceNode('Array', [
+            ts.factory.createTypeReferenceNode(n.name.text, void 0),
         ]),
-        ts.createBlock([
-            ts.createReturn(
-                makeAssert('js', ts.createCall(
-                    ts.createIdentifier('runtime.checkArrayOf'),
+        ts.factory.createBlock([
+            ts.factory.createReturnStatement(
+                makeAssert('js', ts.factory.createCallExpression(
+                    ts.factory.createIdentifier('runtime.checkArrayOf'),
                     void 0,
-                    [ ts.createIdentifier('check' + ucfirst(n.name.text)) ]
+                    [ ts.factory.createIdentifier('check' + ucfirst(n.name.text)) ]
                 ))
             ),
         ], true),
@@ -242,75 +246,9 @@ function makeFnArr(n: ts.TypeAliasDeclaration): ts.Node {
     return fn;
 }
 
-function isUnknown(t: ts.Type): boolean {
-    return !!(t.flags & ts.TypeFlags.Unknown);
-}
-
-function isBoolean(t: ts.Type): boolean {
-    return !!(t.flags & ts.TypeFlags.Boolean);
-}
-
-function isString(t: ts.Type): boolean {
-    return !!(t.flags & ts.TypeFlags.String);
-}
-
-function isNumber(t: ts.Type): boolean {
-    return !!(t.flags & ts.TypeFlags.Number);
-}
-
-function isUndefined(t: ts.Type): boolean {
-    return !!(t.flags & ts.TypeFlags.Undefined) || !!(t.flags & ts.TypeFlags.Void);
-}
-
-function isArray(t: ts.Type, node: ts.Node): node is ts.ArrayTypeNode {
-    return !!node && ts.isArrayTypeNode(node);
-}
-
-function isTuple(t: ts.Type, node: ts.TypeNode): node is ts.TupleTypeNode {
-    return isTypeReference(t) && !!node && ts.isTupleTypeNode(node);
-}
-
-function isRecord(ctx: Context, t: ts.Type): boolean {
-    return !!t.aliasSymbol && t.aliasSymbol === ctx.globals.Record.aliasSymbol;
-}
-
-function isDate(ctx: Context, t: ts.Type): boolean {
-    return t === ctx.globals.Date;
-}
-
-function isObject(t: ts.Type): t is ts.ObjectType {
-    return !!(t.flags & ts.TypeFlags.Object);
-}
-
-function isLiteral(ch: ts.TypeChecker, t: ts.Type): boolean {
-    if (!!(t.flags & ts.TypeFlags.StringLiteral)) {
-        return true;
-    }
-    if (!!(t.flags & ts.TypeFlags.NumberLiteral)) {
-        return true;
-    }
-    if (!!(t.flags & ts.TypeFlags.BooleanLiteral)) {
-        // this is cool
-        // https://github.com/microsoft/TypeScript/issues/22269
-        return true;
-    }
-    if (!!(t.flags & ts.TypeFlags.Undefined)) {
-        return true;
-    }
-    if (!!(t.flags & ts.TypeFlags.Null)) {
-        return true;
-    }
-
-    return false;
-}
-
-function isTypeReference(t: ts.Type): t is ts.TypeReference {
-    return isObject(t) && !!(t.objectFlags & ts.ObjectFlags.Reference);
-}
-
-function makeCheckFn(ctx: Context, name: string, node: ts.TypeNode): [ ts.Node, ts.TypeAliasDeclaration[] ] {
+function makeCheckFn(ctx: Context, name: string, node: ts.Node): [ ts.Node, AcceptableDefT[] ] {
     const checkName = 'check' + ucfirst(name);
-    const typ = ctx.checker.getTypeFromTypeNode(node);
+    const typ = ctx.checker.getTypeAtLocation(node);
     ctx.allChecks.set(typ, makeCheckDeferred(ctx, checkName, []));
 
     if (typ.aliasTypeArguments && typ.aliasTypeArguments.length) {
@@ -320,30 +258,30 @@ function makeCheckFn(ctx: Context, name: string, node: ts.TypeNode): [ ts.Node, 
 
         typ.aliasTypeArguments.forEach(typArg => {
             typNodes.push(
-                ts.createTypeReferenceNode(typArg.symbol.name)
+                ts.factory.createTypeReferenceNode(typArg.symbol.name)
             );
             typArgs.push(
-                ts.createTypeParameterDeclaration(typArg.symbol.name),
+                ts.factory.createTypeParameterDeclaration(typArg.symbol.name),
             );
             params.push(
-                ts.createParameter(void 0, void 0, void 0, `check${ typArg.symbol.name}`, void 0, ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(typArg.symbol.name, void 0) ])),
+                ts.factory.createParameterDeclaration(void 0, void 0, void 0, `check${ typArg.symbol.name}`, void 0, ts.factory.createTypeReferenceNode('runtime.Check', [ ts.factory.createTypeReferenceNode(typArg.symbol.name, void 0) ])),
             );
 
-            ctx.allChecks.set(typArg, [ ts.createIdentifier(`check${ typArg.symbol.name}`), [] ]);
+            ctx.allChecks.set(typArg, [ ts.factory.createIdentifier(`check${ typArg.symbol.name}`), [] ]);
         });
 
         const [ check, deps ] = makeCheck(ctx, node, false, true);
         return [
-            ts.createFunctionDeclaration(
+            ts.factory.createFunctionDeclaration(
                 void 0,
-                [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
+                [ ts.factory.createToken(ts.SyntaxKind.ExportKeyword) ],
                 void 0,
                 checkName,
                 typArgs,
                 params,
-                ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(name, typNodes) ]),
-                ts.createBlock([
-                    ts.createReturn(check),
+                ts.factory.createTypeReferenceNode('runtime.Check', [ ts.factory.createTypeReferenceNode(name, typNodes) ]),
+                ts.factory.createBlock([
+                    ts.factory.createReturnStatement(check),
                 ], true),
             ),
             deps,
@@ -352,12 +290,13 @@ function makeCheckFn(ctx: Context, name: string, node: ts.TypeNode): [ ts.Node, 
 
     const [ check, deps ] = makeCheck(ctx, node, false, true);
     return [
-        ts.createVariableStatement(
-            [ ts.createToken(ts.SyntaxKind.ExportKeyword) ],
-            ts.createVariableDeclarationList([
-                ts.createVariableDeclaration(
+        ts.factory.createVariableStatement(
+            [ ts.factory.createToken(ts.SyntaxKind.ExportKeyword) ],
+            ts.factory.createVariableDeclarationList([
+                ts.factory.createVariableDeclaration(
                     checkName,
-                    ts.createTypeReferenceNode('runtime.Check', [ ts.createTypeReferenceNode(name, void 0) ]),
+                    void 0,
+                    ts.factory.createTypeReferenceNode('runtime.Check', [ ts.factory.createTypeReferenceNode(name, void 0) ]),
                     check,
                 ),
             ], ts.NodeFlags.Const),
@@ -366,27 +305,27 @@ function makeCheckFn(ctx: Context, name: string, node: ts.TypeNode): [ ts.Node, 
     ];
 }
 
-function makeCheck(ctx: Context, node: ts.TypeNode, optional = false, skipExisting = false): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+function makeCheck(ctx: Context, node: ts.Node, optional = false, skipExisting = false): [ ts.Expression, AcceptableDefT[] ] {
     while (ts.isParenthesizedTypeNode(node)) {
         node = node.type;
     }
 
     if (optional) {
         const [ check, deps ] = makeCheck(ctx, node, false);
-        const arg = ts.createArrayLiteral([
-            ts.createIdentifier('runtime.checkEmpty'),
+        const arg = ts.factory.createArrayLiteralExpression([
+            ts.factory.createIdentifier('runtime.checkEmpty'),
             check,
         ], true);
         return [ 
-            ts.createCall(
-                ts.createIdentifier('runtime.checkOr'), [], [ arg ],
+            ts.factory.createCallExpression(
+                ts.factory.createIdentifier('runtime.checkOr'), [], [ arg ],
             ),
             deps,
         ];
     }
 
-    const typ = ctx.checker.getTypeFromTypeNode(node);
-    let deps: ts.TypeAliasDeclaration[] = [];
+    const typ = ctx.checker.getTypeAtLocation(node);
+    let deps: AcceptableDefT[] = [];
 
     if (!skipExisting) {
         const existing = ctx.allChecks.get(typ);
@@ -400,7 +339,7 @@ function makeCheck(ctx: Context, node: ts.TypeNode, optional = false, skipExisti
     }
 
     if (typ.aliasSymbol?.declarations?.length) {
-        deps = [ typ.aliasSymbol.declarations[0] as ts.TypeAliasDeclaration ];
+        deps = [ typ.aliasSymbol.declarations[0] as AcceptableDefT ];
     }
 
     if (isUnknown(typ)) {
@@ -434,20 +373,23 @@ function makeCheck(ctx: Context, node: ts.TypeNode, optional = false, skipExisti
         return makeCheckShapeOf(ctx, typ, deps);
     }
     if (ts.isUnionTypeNode(node)) {
-        return makeCheckOr(ctx, node, typ, deps);
+        return makeCheckOr(ctx, node.types, typ, deps);
     }
     if (ts.isIntersectionTypeNode(node)) {
         return makeCheckAnd(ctx, node, typ, deps);
+    }
+    if (isEnum(typ)) {
+        return makeCheckOr(ctx, (typ.aliasSymbol?.valueDeclaration as ts.EnumDeclaration).members, typ, deps);
     }
 
     throw new Error("Invalid type at " + ctx.checker.typeToString(typ));
 }
 
 function makeAssert(arg: ts.Expression | string, check: ts.Expression): ts.CallExpression {
-    return ts.createCall(
-        ts.createIdentifier('runtime.assert'), 
+    return ts.factory.createCallExpression(
+        ts.factory.createIdentifier('runtime.assert'), 
         [], 
-        [ typeof arg === 'string' ? ts.createIdentifier(arg) : arg, check ],
+        [ typeof arg === 'string' ? ts.factory.createIdentifier(arg) : arg, check ],
     );
 }
 
@@ -455,43 +397,43 @@ function ucfirst(str: string): string {
     return str[0].toUpperCase() + str.substr(1);
 }
 
-function makeCheckUnknown(deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
-    return [ ts.createIdentifier('runtime.checkUnknown'), deps ];
+function makeCheckUnknown(deps: AcceptableDefT[]): [ ts.Expression, AcceptableDefT[] ] {
+    return [ ts.factory.createIdentifier('runtime.checkUnknown'), deps ];
 }
 
-function makeCheckBoolean(deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
-    return [ ts.createIdentifier('runtime.checkBoolean'), deps ];
+function makeCheckBoolean(deps: AcceptableDefT[]): [ ts.Expression, AcceptableDefT[] ] {
+    return [ ts.factory.createIdentifier('runtime.checkBoolean'), deps ];
 }
 
-function makeCheckString(deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
-    return [ ts.createIdentifier('runtime.checkString'), deps ];
+function makeCheckString(deps: AcceptableDefT[]): [ ts.Expression, AcceptableDefT[] ] {
+    return [ ts.factory.createIdentifier('runtime.checkString'), deps ];
 }
 
-function makeCheckNumber(deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
-    return [ ts.createIdentifier('runtime.checkNumber'), deps ];
+function makeCheckNumber(deps: AcceptableDefT[]): [ ts.Expression, AcceptableDefT[] ] {
+    return [ ts.factory.createIdentifier('runtime.checkNumber'), deps ];
 }
 
-function makeCheckEmpty(deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
-    return [ ts.createIdentifier('runtime.checkEmpty'), deps ];
+function makeCheckEmpty(deps: AcceptableDefT[]): [ ts.Expression, AcceptableDefT[] ] {
+    return [ ts.factory.createIdentifier('runtime.checkEmpty'), deps ];
 }
 
-function makeCheckDate(deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
-    return [ ts.createIdentifier('runtime.checkDate'), deps ];
+function makeCheckDate(deps: AcceptableDefT[]): [ ts.Expression, AcceptableDefT[] ] {
+    return [ ts.factory.createIdentifier('runtime.checkDate'), deps ];
 }
 
-function makeCheckRecordOf(ctx: Context, node: ts.TypeNode, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+function makeCheckRecordOf(ctx: Context, node: ts.Node, deps: AcceptableDefT[]): [ ts.Expression, AcceptableDefT[] ] {
     const eltyp = ((node as ts.NodeWithTypeArguments).typeArguments as ts.NodeArray<ts.TypeNode>)[1];
 
     const [ arg, d2 ] = makeCheck(ctx, eltyp);
     return [ 
-        ts.createCall(
-            ts.createIdentifier('runtime.checkRecordOf'), [], [ arg ],
+        ts.factory.createCallExpression(
+            ts.factory.createIdentifier('runtime.checkRecordOf'), [], [ arg ],
         ),
         [ ...deps, ...d2 ],
     ];
 }
 
-function makeCheckShapeOf(ctx: Context, typ: ts.Type, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+function makeCheckShapeOf(ctx: Context, typ: ts.Type, deps: AcceptableDefT[]): [ ts.Expression, AcceptableDefT[] ] {
     const oldPm = ctx.activePropertyMapper;
     const pm = ctx.propertyMappers.get(typ);
     if (pm) {
@@ -516,73 +458,73 @@ function makeCheckShapeOf(ctx: Context, typ: ts.Type, deps: ts.TypeAliasDeclarat
         const [ check, d2 ] = makeCheck(ctx, subnode, optional);
         deps = [ ...deps, ...d2 ];
 
-        assignments.push(ts.createPropertyAssignment(props[k].name, check));
+        assignments.push(ts.factory.createPropertyAssignment(props[k].name, check));
     }
 
-    const arg = ts.createObjectLiteral(assignments, true);
+    const arg = ts.factory.createObjectLiteralExpression(assignments, true);
     const args = [ arg ];
 
     if (ctx.activePropertyMapper) {
-        args.push(ts.createObjectLiteral([
-            ts.createPropertyAssignment('propertyMapper', ts.createIdentifier('runtime.' + ctx.activePropertyMapper)),
+        args.push(ts.factory.createObjectLiteralExpression([
+            ts.factory.createPropertyAssignment('propertyMapper', ts.factory.createIdentifier('runtime.' + ctx.activePropertyMapper)),
         ], true));
     }
 
     ctx.activePropertyMapper = oldPm;
 
     return [
-        ts.createCall(
-            ts.createIdentifier('runtime.checkShapeOf'), [], args,
+        ts.factory.createCallExpression(
+            ts.factory.createIdentifier('runtime.checkShapeOf'), [], args,
         ),
         deps,
     ];
 }
 
-function makeCheckLiteral(ctx: Context, typ: ts.Type, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
-    const arg = ts.createIdentifier(ctx.checker.typeToString(typ));
+function makeCheckLiteral(ctx: Context, typ: ts.Type, deps: AcceptableDefT[]): [ ts.Expression, AcceptableDefT[] ] {
+    const arg = ts.factory.createIdentifier(ctx.checker.typeToString(typ));
     return [ 
-        ts.createCall(
-            ts.createIdentifier('runtime.checkLiteralOf'), [], [ arg ],
+        ts.factory.createCallExpression(
+            ts.factory.createIdentifier('runtime.checkLiteralOf'), [], [ arg ],
         ), 
         deps, 
     ];
 }
 
-function makeCheckTupleOf(ctx: Context, node: ts.TupleTypeNode, typ: ts.Type, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
-    const arg = ts.createArrayLiteral(node.elements.map(typ => {
+function makeCheckTupleOf(ctx: Context, node: ts.TupleTypeNode, typ: ts.Type, deps: AcceptableDefT[]): [ ts.Expression, AcceptableDefT[] ] {
+    const arg = ts.factory.createArrayLiteralExpression(node.elements.map(typ => {
         const [ t, d2 ] = makeCheck(ctx, typ);
         deps = [ ...deps, ...d2 ];
         return t;
     }), true);
     return [
-        ts.createCall(
-            ts.createIdentifier('runtime.checkTupleOf'), [], [ arg ]
+        ts.factory.createCallExpression(
+            ts.factory.createIdentifier('runtime.checkTupleOf'), [], [ arg ]
         ),
         deps,
     ];
 }
 
-function makeCheckArrayOf(ctx: Context, node: ts.ArrayTypeNode, typ: ts.Type, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+function makeCheckArrayOf(ctx: Context, node: ts.ArrayTypeNode, typ: ts.Type, deps: AcceptableDefT[]): [ ts.Expression, AcceptableDefT[] ] {
     const [ arg, d2 ] = makeCheck(ctx, node.elementType);
     return [
-        ts.createCall(
-            ts.createIdentifier('runtime.checkArrayOf'), [], [ arg ],
+        ts.factory.createCallExpression(
+            ts.factory.createIdentifier('runtime.checkArrayOf'), [], [ arg ],
         ),
         [ ...deps, ...d2 ],
     ];
 }
 
-function makeCheckDeferred(ctx: Context, existing: string, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+function makeCheckDeferred(ctx: Context, existing: string, deps: AcceptableDefT[]): [ ts.Expression, AcceptableDefT[] ] {
     return [ 
-        ts.createCall(
-            ts.createIdentifier('runtime.checkDeferred'), [], [ 
-                ts.createArrowFunction(
+        ts.factory.createCallExpression(
+            ts.factory.createIdentifier('runtime.checkDeferred'), [], [ 
+                ts.factory.createArrowFunction(
                     void 0,
                     void 0,
                     [],
                     void 0,
                     void 0,
-                    ts.createIdentifier(existing),
+                    ts.factory.createIdentifier(existing),
                 ),
             ]
         ),
@@ -590,33 +532,33 @@ function makeCheckDeferred(ctx: Context, existing: string, deps: ts.TypeAliasDec
     ];
 }
 
-function makeCheckOr(ctx: Context, node: ts.UnionTypeNode, typ: ts.Type, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
-    const args = node.types.map(t => {
+function makeCheckOr(ctx: Context, types: ts.NodeArray<ts.Node>, typ: ts.Type, deps: AcceptableDefT[]): [ ts.Expression, AcceptableDefT[] ] {
+    const args = types.map(t => {
         const [ check, d2 ] = makeCheck(ctx, t);
         deps = [ ...deps, ...d2 ];
         return check;
     });
-    const arg = ts.createArrayLiteral(args as ts.Expression[], true);
+    const arg = ts.factory.createArrayLiteralExpression(args as ts.Expression[], true);
 
     return [
-        ts.createCall(
-            ts.createIdentifier('runtime.checkOr'), [], [ arg ],
+        ts.factory.createCallExpression(
+            ts.factory.createIdentifier('runtime.checkOr'), [], [ arg ],
         ),
         deps,
     ];
 }
 
-function makeCheckAnd(ctx: Context, node: ts.IntersectionTypeNode, typ: ts.Type, deps: ts.TypeAliasDeclaration[]): [ ts.Expression, ts.TypeAliasDeclaration[] ] {
+function makeCheckAnd(ctx: Context, node: ts.IntersectionTypeNode, typ: ts.Type, deps: AcceptableDefT[]): [ ts.Expression, AcceptableDefT[] ] {
     const args = node.types.map(t => {
         const [ check, d2 ] = makeCheck(ctx, t);
         deps = [ ...deps, ...d2 ];
         return check;
     });
 
-    const arg = ts.createArrayLiteral(args as ts.Expression[], true);
+    const arg = ts.factory.createArrayLiteralExpression(args as ts.Expression[], true);
     return [
-        ts.createCall(
-            ts.createIdentifier('runtime.checkAnd'), [], [ arg ],
+        ts.factory.createCallExpression(
+            ts.factory.createIdentifier('runtime.checkAnd'), [], [ arg ],
         ),
         deps,
     ];

@@ -1,12 +1,13 @@
 import * as ts from 'typescript';
 import * as arg from 'arg';
 import * as shellquote from 'shell-quote';
+import { AcceptableDefT } from './context';
 
 const commentPrefix = '@jonasi/ts-models ';
 
 export type ParsedNode = 
-    | { type: 'generate_type', node: ts.TypeAliasDeclaration, file: ts.SourceFile }
-    | { type: 'type_options', node: ts.TypeAliasDeclaration, propertyMapper: string | undefined, file: ts.SourceFile };
+    | { type: 'generate_type', node: AcceptableDefT, file: ts.SourceFile }
+    | { type: 'type_options', node: AcceptableDefT, propertyMapper: string | undefined, file: ts.SourceFile };
 
 const optionsArgs = {
     '--property-mapper': String,
@@ -23,7 +24,7 @@ export default function parseProgram(pr: ts.Program): ParsedNode[] {
             }
 
             sl.getChildren(file).forEach(node => {
-                if (!ts.isTypeAliasDeclaration(node)) {
+                if (!ts.isTypeAliasDeclaration(node) && !ts.isEnumDeclaration(node)) {
                     return;
                 }
 
