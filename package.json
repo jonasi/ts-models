@@ -1,6 +1,6 @@
 {
     "name": "@jonasi/ts-models",
-    "version": "0.0.22",
+    "version": "0.0.23",
     "main": "dist/index.js",
     "bin": {
         "ts-models-generate": "./dist/bin/index.js"
