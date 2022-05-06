@@ -23,9 +23,6 @@ export function toGeneratedT2(js: runtime.JSONValue): GeneratedT2 {
 export function toGeneratedT2Arr(js: runtime.JSONValue): Array<GeneratedT2> {
     return runtime.assert(js, runtime.checkArrayOf(checkGeneratedT2));
 }
-type GeneratedT3 = {
-    str: string;
-};
 export const checkGeneratedT3: runtime.Check<GeneratedT3> = runtime.checkShapeOf({
     str: runtime.checkString
 });
